@@ -2,7 +2,7 @@
 #include "global.h"
 #include "recomputils.h"
 #include "recompconfig.h"
-//#include "audio/Rick-Roll-Sound-Effect.xxd"
+#include "audioapi.h"
 
 extern DmaHandler sDmaHandler;
 
