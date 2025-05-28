@@ -26,5 +26,5 @@ RECOMP_DLL_FUNC(AudioApi_GetSequence) {
 */
 
 RECOMP_DLL_FUNC(AudioApi_GetSequenceSize) {
-    RECOMP_RETURN(u32, sizeof(__03_zseq));
+    RECOMP_RETURN(s32, sizeof(__03_zseq));
 }

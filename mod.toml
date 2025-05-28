@@ -39,6 +39,9 @@ dependencies = [
 
 # Native libraries (e.g. DLLs) and the functions they export.
 native_libraries = [
+   { name = "libAudioApiNative", funcs = [
+      "AudioApi_GetSequenceSize"
+   ] }
 ]
 
 # Inputs to the mod tool.
