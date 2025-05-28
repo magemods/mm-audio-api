@@ -1,6 +1,6 @@
 BUILD_DIR := build
 MOD_TOML := ./mod.toml
-LIB_NAME := AchievementNative
+LIB_NAME := AudioApiNative
 LIB_PREFIX := lib
 ASSETS_EXTRACTED_DIR ?= assets_extracted
 ASSETS_INCLUDE_DIR ?= assets_extracted/assets
@@ -102,7 +102,7 @@ CPPFLAGS := -nostdinc -D_LANGUAGE_C -DMIPS -DF3DEX_GBI_2 -DF3DEX_GBI_PL -DGBI_DO
 			-I assets_extracted -I assets_extracted/assets -I assets_extracted/assets/assets
 LDFLAGS  := -nostdlib -T $(LDSCRIPT) -Map $(BUILD_DIR)/mod.map --unresolved-symbols=ignore-all --emit-relocs -e 0 --no-nmagic
 
-C_SRCS := $(wildcard src/mod/*.c) $(wildcard src/lib/*.c) $(wildcard src/mod/achievement_hooks/*.c)
+C_SRCS := $(wildcard src/mod/*.c) $(wildcard src/lib/*.c)
 C_OBJS := $(addprefix $(BUILD_DIR)/, $(C_SRCS:.c=.o))
 C_DEPS := $(addprefix $(BUILD_DIR)/, $(C_SRCS:.c=.d))
 
@@ -123,34 +123,34 @@ runtime:
 # Mod Recipes:
 nrm: $(MOD_FILE)
 
-$(MOD_FILE): $(RECOMP_MOD_TOOL) $(MOD_ELF) 
+$(MOD_FILE): $(RECOMP_MOD_TOOL) $(MOD_ELF)
 	$(RECOMP_MOD_TOOL) mod.toml $(BUILD_DIR)
 
 offline: nrm
 	$(OFFLINE_MOD_TOOL) $(MOD_SYMS) $(MOD_BINARY) $(ZELDA_SYMS) $(OFFLINE_C_OUTPUT)
 
-elf: $(MOD_ELF) 
+elf: $(MOD_ELF)
 
 $(MOD_ELF): $(C_OBJS) $(LDSCRIPT) | $(BUILD_DIR) $(ASSETS_INCLUDE_DIR)
 	$(LD) $(C_OBJS) $(LDFLAGS) -o $@
 
-$(BUILD_DIR) $(BUILD_DIR)/src $(BUILD_DIR)/src/mod $(BUILD_DIR)/src/mod/achievement_hooks $(N64RECOMP_BUILD_DIR):
+$(BUILD_DIR) $(BUILD_DIR)/src $(BUILD_DIR)/src/mod $(N64RECOMP_BUILD_DIR):
 ifeq ($(OS),Windows_NT)
 	mkdir $(subst /,\,$@)
 else
 	mkdir -p $@
 endif
 
-$(C_OBJS): $(BUILD_DIR)/%.o : %.c | $(BUILD_DIR) $(BUILD_DIR)/src/mod $(BUILD_DIR)/src/mod/achievement_hooks $(ASSETS_INCLUDE_DIR)
+$(C_OBJS): $(BUILD_DIR)/%.o : %.c | $(BUILD_DIR) $(BUILD_DIR)/src/mod $(ASSETS_INCLUDE_DIR)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $< -MMD -MF $(@:.o=.d) -c -o $@
 
 $(ASSETS_INCLUDE_DIR):
 	$(call call_python_func,create_asset_archive,\"$(ASSETS_INCLUDE_DIR)\")
 
 # Recomp Tools Recipes:
-$(RECOMP_MOD_TOOL): $(N64RECOMP_BUILD_DIR) 
+$(RECOMP_MOD_TOOL): $(N64RECOMP_BUILD_DIR)
 	cmake -DCMAKE_TOOLCHAIN_FILE="../zig_toolchain.cmake" -DZIG_TARGET="$(NATIVE_ZIG_TRIPLET)" -G Ninja \
-		-DCMAKE_BUILD_TYPE=Release -S $(N64RECOMP_DIR) -B $(N64RECOMP_BUILD_DIR) 
+		-DCMAKE_BUILD_TYPE=Release -S $(N64RECOMP_DIR) -B $(N64RECOMP_BUILD_DIR)
 	cmake --build $(N64RECOMP_BUILD_DIR)
 
 # Extlib Recipes:

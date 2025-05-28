@@ -2,12 +2,13 @@
 #include "global.h"
 #include "recomputils.h"
 #include "recompconfig.h"
-#include "audio/Rick-Roll-Sound-Effect.xxd"
+//#include "audio/Rick-Roll-Sound-Effect.xxd"
 
 extern DmaHandler sDmaHandler;
 
 /* Define our sample */
 
+/*
 extern AdpcmBook SF0_StepGround_BOOK;
 
 AdpcmLoop rickroll_LOOP = { (AdpcmLoopHeader){0, sizeof(Rick_Roll_Sound_Effect_aifc), 0, 0}, {0} };
@@ -17,6 +18,7 @@ Sample rickrollSample = {
     &rickroll_LOOP,
     &SF0_StepGround_BOOK
 };
+*/
 
 /* -------------------------------------------------------------------------------- */
 
@@ -113,6 +115,7 @@ RECOMP_HOOK_RETURN("AudioLoad_SyncDma") void on_AudioLoad_SyncDma_Return() {
         SoundEffect* soundEffect;
         Instrument* inst;
 
+        /*
         // This won't be needed once we stop stealing other sample's book
         void* reloc;
 #define AUDIO_RELOC(v, base) (reloc = (void*)((uintptr_t)(v) + (uintptr_t)(base)))
@@ -126,6 +129,7 @@ RECOMP_HOOK_RETURN("AudioLoad_SyncDma") void on_AudioLoad_SyncDma_Return() {
         // Cucco Crows
         inst = (Instrument*)(sRamAddr + fontData[61 + 2]); // cuccoo
         inst->normalPitchTunedSample.sample = &rickrollSample;
+        */
     }
 
     // 0x46af0 is Sequence_0
