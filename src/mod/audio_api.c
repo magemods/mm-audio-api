@@ -22,8 +22,6 @@ Sample rickrollSample = {
 
 /* -------------------------------------------------------------------------------- */
 
-RECOMP_DECLARE_EVENT(audio_api_init());
-
 // We need more exports for replacing samples, etc
 
 RECOMP_EXPORT void audio_api_replace_sequence(u32 id, void* modAddr, size_t size) {
@@ -34,8 +32,15 @@ RECOMP_EXPORT void audio_api_replace_sequence(u32 id, void* modAddr, size_t size
     entry->size = size; //ALIGN16(size);
 }
 
+RECOMP_DECLARE_EVENT(AudioApi_Init());
+
 RECOMP_HOOK("AudioLoad_Init") void on_AudioLoad_Init() {
-    audio_api_init();
+    unsigned char* savepath = recomp_get_save_file_path();
+    AudioApiNative_Init(0, savepath);
+    recomp_free(savepath);
+
+    // Call our event for other mods to hook into
+    AudioApi_Init();
 }
 
 /* -------------------------------------------------------------------------------- */

@@ -46,8 +46,9 @@ typedef PACKED_STRUCT {
 
 #ifdef MIPS
 #include "modding.h"
+RECOMP_IMPORT(".", void AudioApiNative_Init(unsigned int log_level, unsigned const char* savepath));
 //RECOMP_IMPORT(".", char* AudioApi_GetSequence());
-RECOMP_IMPORT(".",  s32 AudioApi_GetSequenceSize());
+RECOMP_IMPORT(".",  s32 AudioApiNative_GetSequenceSize());
 #endif
 
 #ifdef __cplusplus
