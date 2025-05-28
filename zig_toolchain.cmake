@@ -1,0 +1,5 @@
+set(CMAKE_C_COMPILER zig cc)
+set(CMAKE_CXX_COMPILER zig c++)
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -target ${ZIG_TARGET}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -target ${ZIG_TARGET}")

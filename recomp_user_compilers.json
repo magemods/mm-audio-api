@@ -1,0 +1,6 @@
+{
+    "mod_compiling": {
+        "compiler": "clang",
+        "linker": "ld.lld"
+    }
+}
