@@ -12,7 +12,7 @@ extern AdpcmBook SF0_StepGround_BOOK;
 
 AdpcmLoop rickroll_LOOP = { (AdpcmLoopHeader){0, sizeof(Rick_Roll_Sound_Effect_aifc), 0, 0}, {0} };
 Sample rickrollSample = {
-    0, CODEC_ADPCM, 3, false, false,
+    0, CODEC_ADPCM, MEDIUM_CART, false, false,
     sizeof(Rick_Roll_Sound_Effect_aifc), Rick_Roll_Sound_Effect_aifc,
     &rickroll_LOOP,
     &SF0_StepGround_BOOK
