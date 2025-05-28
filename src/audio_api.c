@@ -38,6 +38,7 @@ RECOMP_HOOK("AudioLoad_Init") void on_AudioLoad_Init() {
 
 /* -------------------------------------------------------------------------------- */
 
+// Our custom function
 s32 AudioApi_Dma_Mod(OSIoMesg* mesg, u32 priority, s32 direction, uintptr_t devAddr, void* ramAddr,
                      size_t size, OSMesgQueue* reqQueue, s32 medium, const char* dmaFuncType) {
       osSendMesg(reqQueue, NULL, OS_MESG_NOBLOCK);
@@ -45,6 +46,7 @@ s32 AudioApi_Dma_Mod(OSIoMesg* mesg, u32 priority, s32 direction, uintptr_t devA
       return 0;
 }
 
+// The original function
 s32 AudioApi_Dma_Rom(OSIoMesg* mesg, u32 priority, s32 direction, uintptr_t devAddr, void* ramAddr,
                      size_t size, OSMesgQueue* reqQueue, s32 medium, const char* dmaFuncType) {
     OSPiHandle* handle;
@@ -93,101 +95,21 @@ RECOMP_PATCH s32 AudioLoad_Dma(OSIoMesg* mesg, u32 priority, s32 direction, uint
 }
 
 /* -------------------------------------------------------------------------------- */
-/*
-void AudioApi_AsyncDma_Rom(AudioAsyncLoad* asyncLoad, size_t size) {
-    size = ALIGN16(size);
-    Audio_InvalDCache(asyncLoad->curRamAddr, size);
-    osCreateMesgQueue(&asyncLoad->msgQueue, &asyncLoad->msg, 1);
-    AudioLoad_Dma(&asyncLoad->ioMesg, OS_MESG_PRI_NORMAL, OS_READ, asyncLoad->curDevAddr, asyncLoad->curRamAddr,
-                  size, &asyncLoad->msgQueue, asyncLoad->medium, "BGCOPY");
+
+static uintptr_t sDevAddr = 0;
+static u8* sRamAddr = NULL;
+
+RECOMP_HOOK("AudioLoad_SyncDma") void on_AudioLoad_SyncDma(uintptr_t devAddr, u8* ramAddr, size_t size, s32 medium) {
+    sDevAddr = devAddr;
+    sRamAddr = ramAddr;
 }
 
-void AudioApi_AsyncDma_Mod(AudioAsyncLoad* asyncLoad, size_t size) {
-    osSendMesg(&asyncLoad->msgQueue, NULL, OS_MESG_NOBLOCK);
-    size = ALIGN16(size);
-    Audio_InvalDCache(asyncLoad->curRamAddr, size);
-    Lib_MemCpy(asyncLoad->curRamAddr, (void*)asyncLoad->curDevAddr, size);
-}
-
-RECOMP_PATCH void AudioLoad_AsyncDma(AudioAsyncLoad* asyncLoad, size_t size) {
-    if (IS_KSEG0(asyncLoad->curDevAddr)) {
-        AudioApi_AsyncDma_Mod(asyncLoad, size);
-    } else {
-        AudioApi_AsyncDma_Rom(asyncLoad, size);
-    }
-}
-//*/
-/* -------------------------------------------------------------------------------- */
-/*
-void AudioApi_DmaSlowCopy_Mod(AudioSlowLoad* slowLoad, size_t size) {
-    osSendMesg(&slowLoad->msgqueue, NULL, OS_MESG_NOBLOCK);
-    Audio_InvalDCache(slowLoad->curRamAddr, size);
-    Lib_MemCpy(slowLoad->curRamAddr, (void*)slowLoad->curDevAddr, size);
-}
-
-void AudioApi_DmaSlowCopy_Rom(AudioSlowLoad* slowLoad, size_t size) {
-    Audio_InvalDCache(slowLoad->curRamAddr, size);
-    osCreateMesgQueue(&slowLoad->msgqueue, &slowLoad->msg, 1);
-    AudioLoad_Dma(&slowLoad->ioMesg, OS_MESG_PRI_NORMAL, OS_READ, slowLoad->curDevAddr, slowLoad->curRamAddr, size,
-                  &slowLoad->msgqueue, slowLoad->medium, "SLOWCOPY");
-}
-
-RECOMP_PATCH void AudioLoad_DmaSlowCopy(AudioSlowLoad* slowLoad, size_t size) {
-    if (IS_KSEG0(slowLoad->curDevAddr)) {
-        AudioApi_DmaSlowCopy_Mod(slowLoad, size);
-    } else {
-        AudioApi_DmaSlowCopy_Rom(slowLoad, size);
-    }
-}
-//*/
-/* -------------------------------------------------------------------------------- */
-
-void AudioApi_SyncDma_Mod(uintptr_t devAddr, u8* ramAddr, size_t size, s32 medium) {
-    osSendMesg(&gAudioCtx.syncDmaQueue, NULL, OS_MESG_NOBLOCK);
-    Audio_InvalDCache(ramAddr, size);
-    Lib_MemCpy(ramAddr, (void*)devAddr, size);
-}
-
-void AudioApi_SyncDma_Rom(uintptr_t devAddr, u8* ramAddr, size_t size, s32 medium) {
-    OSMesgQueue* msgQueue = &gAudioCtx.syncDmaQueue;
-    OSIoMesg* ioMesg = &gAudioCtx.syncDmaIoMesg;
-    size = ALIGN16(size);
-
-    Audio_InvalDCache(ramAddr, size);
-
-    while (true) {
-        if (size < 0x400) {
-            break;
-        }
-        AudioLoad_Dma(ioMesg, OS_MESG_PRI_HIGH, OS_READ, devAddr, ramAddr, 0x400, msgQueue, medium, "FastCopy");
-        osRecvMesg(msgQueue, NULL, OS_MESG_BLOCK);
-        size -= 0x400;
-        devAddr += 0x400;
-        ramAddr += 0x400;
-    }
-
-    if (size != 0) {
-        AudioLoad_Dma(ioMesg, OS_MESG_PRI_HIGH, OS_READ, devAddr, ramAddr, size, msgQueue, medium, "FastCopy");
-        osRecvMesg(msgQueue, NULL, OS_MESG_BLOCK);
-    }
-}
-
-
-RECOMP_PATCH void AudioLoad_SyncDma(uintptr_t devAddr, u8* ramAddr, size_t size, s32 medium) {
-    recomp_printf("AudioLoad_SyncDma called: devAddr=%p, ramAddr=%p, size=%d, medium=%d\n",
-                  (void*)devAddr, ramAddr, size, medium);
-
-    if (IS_KSEG0(devAddr)) {
-        AudioApi_SyncDma_Mod(devAddr, ramAddr, size, medium);
-    } else {
-        AudioApi_SyncDma_Rom(devAddr, ramAddr, size, medium);
-    }
-
-    // From here, we can modify any soundfont or sequence
+RECOMP_HOOK_RETURN("AudioLoad_SyncDma") void on_AudioLoad_SyncDma_Return() {
+    // Here we can modify any soundfont or sequence
 
     // 0x20700 is Soundfont_0
-    if (devAddr == 0x20700) {
-        uintptr_t* fontData = (uintptr_t*)ramAddr;
+    if (sDevAddr == 0x20700) {
+        uintptr_t* fontData = (uintptr_t*)sRamAddr;
         SoundEffect* soundEffect;
         Instrument* inst;
 
@@ -198,18 +120,18 @@ RECOMP_PATCH void AudioLoad_SyncDma(uintptr_t devAddr, u8* ramAddr, size_t size,
 #undef AUDIO_RELOC
 
         // One of link's slashes
-        soundEffect = (SoundEffect*)(ramAddr + fontData[1] + 224);
+        soundEffect = (SoundEffect*)(sRamAddr + fontData[1] + 224);
         soundEffect->tunedSample.sample = &rickrollSample;
 
         // Cucco Crows
-        inst = (Instrument*)(ramAddr + fontData[61 + 2]); // cuccoo
+        inst = (Instrument*)(sRamAddr + fontData[61 + 2]); // cuccoo
         inst->normalPitchTunedSample.sample = &rickrollSample;
     }
 
     // 0x46af0 is Sequence_0
-    if (devAddr == 0x46af0) {
+    if (sDevAddr == 0x46af0) {
         u32 dogBarkSfx = 0x3D0D;
-        char* dogPtr = (char*)(ramAddr + 0x3D0D);
+        char* dogPtr = (char*)(sRamAddr + 0x3D0D);
         // Change channel to CHAN_EV_RUPY_FALL, which is 12 bytes ahead
         dogPtr[2] += 0xC;
     }
