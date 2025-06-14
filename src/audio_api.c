@@ -2,6 +2,7 @@
 #include "global.h"
 #include "recomputils.h"
 #include "recompconfig.h"
+#include "util.h"
 #include "audio/Rick-Roll-Sound-Effect.xxd"
 
 extern DmaHandler sDmaHandler;
@@ -9,8 +10,15 @@ extern DmaHandler sDmaHandler;
 /* Define our sample */
 
 extern AdpcmBook SF0_StepGround_BOOK;
-
-AdpcmLoop rickroll_LOOP = { (AdpcmLoopHeader){0, sizeof(Rick_Roll_Sound_Effect_aifc), 0, 0}, {0} };
+AdpcmLoop rickroll_LOOP = {
+    {
+        0,          // start
+        288440 / 2, // loopEnd -- calculated manuall from size of uncompress audio / 2
+        0,          // count
+        0,          // sampleEnd
+    },
+    { }
+};
 Sample rickrollSample = {
     0, CODEC_ADPCM, MEDIUM_CART, false, false,
     sizeof(Rick_Roll_Sound_Effect_aifc), Rick_Roll_Sound_Effect_aifc,
@@ -119,20 +127,45 @@ RECOMP_HOOK_RETURN("AudioLoad_SyncDma") void on_AudioLoad_SyncDma_Return() {
         rickrollSample.book = AUDIO_RELOC(rickrollSample.book, fontData);
 #undef AUDIO_RELOC
 
-        // One of link's slashes
-        soundEffect = (SoundEffect*)(sRamAddr + fontData[1] + 224);
-        soundEffect->tunedSample.sample = &rickrollSample;
-
-        // Cucco Crows
-        inst = (Instrument*)(sRamAddr + fontData[61 + 2]); // cuccoo
+        // Change Cucco Crows Instrument's sample to Rick Roll
+        inst = (Instrument*)(sRamAddr + fontData[61 + 2]);
         inst->normalPitchTunedSample.sample = &rickrollSample;
     }
 
     // 0x46af0 is Sequence_0
     if (sDevAddr == 0x46af0) {
-        u32 dogBarkSfx = 0x3D0D;
-        char* dogPtr = (char*)(sRamAddr + 0x3D0D);
-        // Change channel to CHAN_EV_RUPY_FALL, which is 12 bytes ahead
-        dogPtr[2] += 0xC;
+        // Here, we can modify sequence 0 in various ways.
+
+        u16* tableEnvironmentPtr = (u16*)(sRamAddr + 0x23E8);
+
+        // ----------------------------------------
+
+        // For instruments, if we update the sample, we must also update the corresponding
+        // channel's NOTEDV delay (length), otherwise it will cut off early
+        u8* chanCuccoPtr = (u8*)(sRamAddr + 0x2938);
+        u16 delay = 864; // num_seconds * 96 ??
+
+        // print_bytes(chanCuccoPtr, 11);
+        // C1 - ASEQ_OP_CHAN_INSTR
+        // 3D - instr 61
+        // 88 - ASEQ_OP_CHAN_LDLAYER 0x88 + <layerNum:b3>
+        // 29 - LAYER_293E
+        // 3E
+        // FF - ASEQ_OP_END
+        // 67 - ASEQ_OP_LAYER_NOTEDV  0x40 + 39
+        // 80 - <delay:var>
+        // A6
+        // 69 - <velocity:u8>
+        // FF - ASEQ_OP_END
+
+        // Write Long encoded numbers a la MIDI
+        chanCuccoPtr[7] = 0x80 | (delay & 0x7f00) >> 8;
+        chanCuccoPtr[8] = delay & 0xFF;
+
+        // ----------------------------------------
+
+        // Change CHAN_EV_SMALL_DOG_BARK's layer to CHAN_EV_RUPY_FALL's layer, which is 12 bytes ahead
+        u8* chanDogBarkPtr = (u8*)(sRamAddr + 0x3D0D);
+        chanDogBarkPtr[2] += 0xC;
     }
 }
