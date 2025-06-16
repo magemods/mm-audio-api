@@ -1,105 +1,96 @@
-#include "modding.h"
 #include "global.h"
+#include "modding.h"
+#include "recompdata.h"
 #include "recomputils.h"
-#include "recompconfig.h"
 #include "util.h"
-#include "audio/Rick-Roll-Sound-Effect.xxd"
+#include "audio_load.h"
+#include "soundfont.h"
 
-extern DmaHandler sDmaHandler;
+typedef struct {
+    s32 id;
+    void* value;
+} MapEntry;
 
-/* Define our sample */
+U32MemoryHashmapHandle instrumentMap;
+U32MemoryHashmapHandle sfxMap;
 
-extern AdpcmBook SF0_StepGround_BOOK;
-AdpcmLoop rickroll_LOOP = {
-    {
-        0,          // start
-        288440 / 2, // loopEnd -- calculated manuall from size of uncompress audio / 2
-        0,          // count
-        0,          // sampleEnd
-    },
-    { }
-};
-Sample rickrollSample = {
-    0, CODEC_ADPCM, MEDIUM_CART, false, false,
-    sizeof(Rick_Roll_Sound_Effect_aifc), Rick_Roll_Sound_Effect_aifc,
-    &rickroll_LOOP,
-    &SF0_StepGround_BOOK
-};
+// API Interface
 
-/* -------------------------------------------------------------------------------- */
+RECOMP_DECLARE_EVENT(AudioApi_Init());
 
-RECOMP_DECLARE_EVENT(audio_api_init());
-
-// We need more exports for replacing samples, etc
-
-RECOMP_EXPORT void audio_api_replace_sequence(u32 id, void* modAddr, size_t size) {
-    AudioTable* table = (AudioTable*)gSequenceTable;
-    AudioTableEntry* entry = &table->entries[id];
-
-    entry->romAddr = (uintptr_t)modAddr - SEGMENT_ROM_START(Audioseq);
-    entry->size = size; //ALIGN16(size);
+RECOMP_EXPORT s16 AudioApi_AddSequence(AudioTableEntry entry) {
+    return AudioApi_AddTableEntry(&gAudioCtx.sequenceTable, entry);
 }
 
-RECOMP_HOOK("AudioLoad_Init") void on_AudioLoad_Init() {
-    audio_api_init();
+RECOMP_EXPORT void AudioApi_ReplaceSequence(s16 id, AudioTableEntry entry) {
+    AudioApi_ReplaceTableEntry(gAudioCtx.sequenceTable, id, entry);
 }
 
-/* -------------------------------------------------------------------------------- */
-
-// Our custom function
-s32 AudioApi_Dma_Mod(OSIoMesg* mesg, u32 priority, s32 direction, uintptr_t devAddr, void* ramAddr,
-                     size_t size, OSMesgQueue* reqQueue, s32 medium, const char* dmaFuncType) {
-      osSendMesg(reqQueue, NULL, OS_MESG_NOBLOCK);
-      Lib_MemCpy(ramAddr, (void*)devAddr, size);
-      return 0;
+RECOMP_EXPORT void AudioApi_RestoreSequence(s16 id) {
+    AudioApi_RestoreTableEntry(gAudioCtx.sequenceTable, id);
 }
 
-// The original function
-s32 AudioApi_Dma_Rom(OSIoMesg* mesg, u32 priority, s32 direction, uintptr_t devAddr, void* ramAddr,
-                     size_t size, OSMesgQueue* reqQueue, s32 medium, const char* dmaFuncType) {
-    OSPiHandle* handle;
+RECOMP_EXPORT int AudioApi_ReplaceInstrument(s32 id, Instrument* instrument) {
+    if (!instrument) return 0;
 
-    if (gAudioCtx.resetTimer > 16) {
-        return -1;
+    Instrument* copy = AudioApi_CopyInstrument(instrument);
+    if (!copy) return 0;
+
+    MapEntry entry = { id, copy };
+
+    u32 count = recomputil_u32_memory_hashmap_size(instrumentMap);
+    if (!recomputil_u32_memory_hashmap_create(instrumentMap, count)) {
+        AudioApi_FreeInstrument(copy);
+        return 0;
     }
 
-    switch (medium) {
-        case MEDIUM_CART:
-            handle = gAudioCtx.cartHandle;
-            break;
-
-        case MEDIUM_DISK_DRIVE:
-            // driveHandle is uninitialized and corresponds to stubbed-out disk drive support.
-            // SM64 Shindou called osDriveRomInit here.
-            handle = gAudioCtx.driveHandle;
-            break;
-
-        default:
-            return 0;
+    MapEntry* entryAddr = recomputil_u32_memory_hashmap_get(instrumentMap, count);
+    if (!entryAddr) {
+        AudioApi_FreeInstrument(copy);
+        return 0;
     }
 
-    if ((size % 0x10) != 0) {
-        size = ALIGN16(size);
+    *entryAddr = entry;
+    return 1;
+}
+
+RECOMP_EXPORT int AudioApi_ReplaceSoundEffect(s32 id, SoundEffect* sfx) {
+    if (!sfx) return 0;
+
+    SoundEffect* copy = AudioApi_CopySoundEffect(sfx);
+    if (!copy) return 0;
+
+    MapEntry entry = { id, copy };
+
+    u32 count = recomputil_u32_memory_hashmap_size(sfxMap);
+    if (!recomputil_u32_memory_hashmap_create(sfxMap, count)) {
+        AudioApi_FreeSoundEffect(copy);
+        return 0;
     }
 
-    mesg->hdr.pri = priority;
-    mesg->hdr.retQueue = reqQueue;
-    mesg->dramAddr = ramAddr;
-    mesg->devAddr = devAddr;
-    mesg->size = size;
-    handle->transferInfo.cmdType = 2;
-    sDmaHandler(handle, mesg, direction);
-    return 0;
+    MapEntry* entryAddr = recomputil_u32_memory_hashmap_get(sfxMap, count);
+    if (!entryAddr) {
+        AudioApi_FreeSoundEffect(copy);
+        return 0;
+    }
+
+    *entryAddr = entry;
+    return 1;
 }
 
 
-RECOMP_PATCH s32 AudioLoad_Dma(OSIoMesg* mesg, u32 priority, s32 direction, uintptr_t devAddr, void* ramAddr,
-                               size_t size, OSMesgQueue* reqQueue, s32 medium, const char* dmaFuncType) {
-    if (IS_KSEG0(devAddr)) {
-        return AudioApi_Dma_Mod(mesg, priority, direction, devAddr, ramAddr, size, reqQueue, medium, dmaFuncType);
-    } else {
-        return AudioApi_Dma_Rom(mesg, priority, direction, devAddr, ramAddr, size, reqQueue, medium, dmaFuncType);
-    }
+void AudioApi_PreInit() {
+    // Make copies of tables so we can resize later
+    gAudioCtx.sequenceTable = AudioApi_CopyTable(gAudioCtx.sequenceTable);
+    gAudioCtx.soundFontTable = AudioApi_CopyTable(gAudioCtx.soundFontTable);
+    gAudioCtx.sampleBankTable = AudioApi_CopyTable(gAudioCtx.sampleBankTable);
+
+    //
+    instrumentMap = recomputil_create_u32_memory_hashmap(sizeof(MapEntry));
+    sfxMap = recomputil_create_u32_memory_hashmap(sizeof(MapEntry));
+
+    // Call event for mods to register data
+    AudioApi_Init();
 }
 
 /* -------------------------------------------------------------------------------- */
@@ -113,26 +104,31 @@ RECOMP_HOOK("AudioLoad_SyncDma") void on_AudioLoad_SyncDma(uintptr_t devAddr, u8
 }
 
 RECOMP_HOOK_RETURN("AudioLoad_SyncDma") void on_AudioLoad_SyncDma_Return() {
-    // Here we can modify any soundfont or sequence
-
     // 0x20700 is Soundfont_0
     if (sDevAddr == 0x20700) {
         uintptr_t* fontData = (uintptr_t*)sRamAddr;
-        SoundEffect* soundEffect;
-        Instrument* inst;
+        u32 i;
 
-        // This won't be needed once we stop stealing other sample's book
-        void* reloc;
-#define AUDIO_RELOC(v, base) (reloc = (void*)((uintptr_t)(v) + (uintptr_t)(base)))
-        rickrollSample.book = AUDIO_RELOC(rickrollSample.book, fontData);
-#undef AUDIO_RELOC
+        for (i = 0; i < recomputil_u32_memory_hashmap_size(instrumentMap); i++) {
+            MapEntry* entry = recomputil_u32_memory_hashmap_get(instrumentMap, i);
+            if (!entry) continue;
 
-        // Change Cucco Crows Instrument's sample to Rick Roll
-        inst = (Instrument*)(sRamAddr + fontData[61 + 2]);
-        inst->normalPitchTunedSample.sample = &rickrollSample;
+            Instrument* instrument = (Instrument*)(sRamAddr + fontData[2 + entry->id]);
+            *instrument = *(Instrument*)entry->value;
+        }
+
+        for (i = 0; i < recomputil_u32_memory_hashmap_size(sfxMap); i++) {
+            MapEntry* entry = recomputil_u32_memory_hashmap_get(sfxMap, i);
+            if (!entry) continue;
+
+            SoundEffect* sfx = (SoundEffect*)(sRamAddr + fontData[1] + entry->id);
+            *sfx = *(SoundEffect*)entry->value;
+        }
+
     }
 
     // 0x46af0 is Sequence_0
+    recomp_printf("loading %p %p\n", sDevAddr, sRamAddr);
     if (sDevAddr == 0x46af0) {
         // Here, we can modify sequence 0 in various ways.
 
