@@ -21,7 +21,7 @@ AudioTable* AudioApi_CopyTable(AudioTable* table) {
     return newTable;
 }
 
-s16 AudioApi_AddTableEntry(AudioTable** tablePtr, AudioTableEntry entry) {
+s32 AudioApi_AddTableEntry(AudioTable** tablePtr, AudioTableEntry entry) {
     AudioTable* table = *tablePtr;
     size_t count = table->header.numEntries + 1;
     size_t size = sizeof(AudioTableHeader) + count * sizeof(AudioTableEntry);
@@ -39,13 +39,13 @@ s16 AudioApi_AddTableEntry(AudioTable** tablePtr, AudioTableEntry entry) {
     return count - 1;
 }
 
-void AudioApi_ReplaceTableEntry(AudioTable* table, s16 id, AudioTableEntry entry) {
+void AudioApi_ReplaceTableEntry(AudioTable* table, AudioTableEntry entry, s32 id) {
     if (id < table->header.numEntries) {
         table->entries[id] = entry;
     }
 }
 
-void AudioApi_RestoreTableEntry(AudioTable* table, s16 id) {
+void AudioApi_RestoreTableEntry(AudioTable* table, s32 id) {
     AudioTable* origTable = (AudioTable*)gSequenceTable;
     if (id < origTable->header.numEntries) {
         table->entries[id] = origTable->entries[id];
@@ -261,8 +261,8 @@ RECOMP_PATCH s32 AudioLoad_Dma(OSIoMesg* mesg, u32 priority, s32 direction, uint
 
 /* -------------------------------------------------------------------------- */
 
-void AudioApi_LoadSoundFont(s32 id, u8* ramAddr);
-void AudioApi_LoadSequence(s32 id, u8* ramAddr);
+void AudioApi_LoadSoundFont(u8* ramAddr, s32 fontId);
+void AudioApi_LoadSequence(u8* ramAddr, s32 seqId);
 
 static uintptr_t sDevAddr = 0;
 static u8* sRamAddr = NULL;
@@ -279,14 +279,14 @@ RECOMP_HOOK_RETURN("AudioLoad_SyncDma") void AudioLoad_afterSyncDma() {
     for (id = 0; id < gAudioCtx.sequenceTable->header.numEntries; id++) {
         AudioTableEntry* entry = &gAudioCtx.sequenceTable->entries[id];
         if (entry->romAddr == sDevAddr) {
-            AudioApi_LoadSequence(id, sRamAddr);
+            AudioApi_LoadSequence(sRamAddr, id);
         }
     }
 
     for (id = 0; id < gAudioCtx.soundFontTable->header.numEntries; id++) {
         AudioTableEntry* entry = &gAudioCtx.soundFontTable->entries[id];
         if (entry->romAddr == sDevAddr) {
-            AudioApi_LoadSoundFont(id, sRamAddr);
+            AudioApi_LoadSoundFont(sRamAddr, id);
         }
     }
 }

@@ -11,10 +11,10 @@ INCBIN(attack2, "src/test/attack2.raw");
 INCBIN(attack3, "src/test/attack3.raw");
 
 RECOMP_IMPORT(".", s16 AudioApi_AddSequence(AudioTableEntry entry));
-RECOMP_IMPORT(".", void AudioApi_ReplaceSequence(s16 id, AudioTableEntry entry));
-RECOMP_IMPORT(".", void AudioApi_RestoreSequence(s16 id));
-RECOMP_IMPORT(".", void AudioApi_ReplaceInstrument(s32 id, Instrument* instrument));
-RECOMP_IMPORT(".", void AudioApi_ReplaceSoundEffect(s32 id, SoundEffect* sfx));
+RECOMP_IMPORT(".", void AudioApi_ReplaceSequence(AudioTableEntry entry, s32 seqId));
+RECOMP_IMPORT(".", void AudioApi_RestoreSequence(s32 seqId));
+RECOMP_IMPORT(".", void AudioApi_ReplaceInstrument(Instrument* instrument, s32 seqId));
+RECOMP_IMPORT(".", void AudioApi_ReplaceSoundEffect(SoundEffect* sfx, s32 seqId));
 
 EnvelopePoint myEnv[] = {
     ENVELOPE_POINT(    1, 32700),
@@ -36,7 +36,7 @@ RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
             0, 0, 0,                 // shortData
         };
 
-        AudioApi_ReplaceSequence(NA_BGM_FILE_SELECT, mySeq);
+        AudioApi_ReplaceSequence(mySeq, NA_BGM_FILE_SELECT);
     }
 
     {
@@ -65,9 +65,7 @@ RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
             INSTR_SAMPLE_NONE,
         };
 
-        recomp_printf("CHAN: %d\n", NA_SE_EV_CHICKEN_CRY_M);
-
-        AudioApi_ReplaceInstrument(61, &myInstrument);
+        AudioApi_ReplaceInstrument(&myInstrument, 61);
     }
 
     {
@@ -87,12 +85,9 @@ RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
             { &mySample, 2.0f },
         };
 
-        // Actor_PlaySfx
-        recomp_printf("CHAN: %d\n", NA_SE_VO_LI_SWORD_N);
-
-        AudioApi_ReplaceSoundEffect(32, &mySfx); // does nothing?
-        //AudioApi_ReplaceSoundEffect(196, &mySfx); // segfaults on launch
-        //AudioApi_ReplaceSoundEffect(224, &mySfx); // works
+        AudioApi_ReplaceSoundEffect(&mySfx, 32); // does nothing?
+        //AudioApi_ReplaceSoundEffect(&mySfx, 196); // segfaults on launch
+        //AudioApi_ReplaceSoundEffect(&mySfx, 224); // works
     }
 
     {
@@ -112,13 +107,13 @@ RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
             { &mySample, 2.0f },
         };
 
-        // AudioApi_ReplaceSoundEffect(33, &mySfx); // does nothing?
-        // AudioApi_ReplaceSoundEffect(197, &mySfx); // segfault on launch
-        // AudioApi_ReplaceSoundEffect(225, &mySfx); // segfault on attack
+        // AudioApi_ReplaceSoundEffect(&mySfx, 33); // does nothing?
+        // AudioApi_ReplaceSoundEffect(&mySfx, 197); // segfault on launch
+        // AudioApi_ReplaceSoundEffect(&mySfx, 225); // segfault on attack
     }
 }
 
-RECOMP_CALLBACK(".", AudioApi_onLoadSequence) void my_mod_on_load_sequence(s32 seqId, u8* ramAddr) {
+RECOMP_CALLBACK(".", AudioApi_onLoadSequence) void my_mod_on_load_sequence(u8* ramAddr, s32 seqId) {
     // Here, we can modify sequence 0 in various ways.
     if (seqId == 0) {
 

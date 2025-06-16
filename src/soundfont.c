@@ -3,7 +3,7 @@
 #include "recompdata.h"
 #include "recomputils.h"
 
-RECOMP_DECLARE_EVENT(AudioApi_onLoadSoundFont(s32 id, u8* ramAddr));
+RECOMP_DECLARE_EVENT(AudioApi_onLoadSoundFont(u8* ramAddr, s32 fontId));
 
 SoundEffect* AudioApi_CopySoundEffect(SoundEffect* src);
 Instrument* AudioApi_CopyInstrument(Instrument* src);
@@ -28,11 +28,11 @@ RECOMP_CALLBACK("*", recomp_on_init) void AudioApi_SoundFontInit() {
     instrumentMap = recomputil_create_u32_memory_hashmap(sizeof(SoundFontMapEntry));
 }
 
-RECOMP_EXPORT int AudioApi_ReplaceSoundEffect(s32 id, SoundEffect* sfx) {
+RECOMP_EXPORT int AudioApi_ReplaceSoundEffect(SoundEffect* sfx, s32 sfxId) {
     SoundEffect* copy = AudioApi_CopySoundEffect(sfx);
     if (!copy) return 0;
 
-    SoundFontMapEntry entry = { id, copy };
+    SoundFontMapEntry entry = { sfxId, copy };
 
     u32 count = recomputil_u32_memory_hashmap_size(sfxMap);
     if (!recomputil_u32_memory_hashmap_create(sfxMap, count)) {
@@ -50,11 +50,11 @@ RECOMP_EXPORT int AudioApi_ReplaceSoundEffect(s32 id, SoundEffect* sfx) {
     return 1;
 }
 
-RECOMP_EXPORT int AudioApi_ReplaceInstrument(s32 id, Instrument* instrument) {
+RECOMP_EXPORT int AudioApi_ReplaceInstrument(Instrument* instrument, s32 instId) {
     Instrument* copy = AudioApi_CopyInstrument(instrument);
     if (!copy) return 0;
 
-    SoundFontMapEntry entry = { id, copy };
+    SoundFontMapEntry entry = { instId, copy };
 
     u32 count = recomputil_u32_memory_hashmap_size(instrumentMap);
     if (!recomputil_u32_memory_hashmap_create(instrumentMap, count)) {
@@ -72,7 +72,7 @@ RECOMP_EXPORT int AudioApi_ReplaceInstrument(s32 id, Instrument* instrument) {
     return 1;
 }
 
-void AudioApi_ApplySoundFontChanges(u8* ramAddr) {
+void AudioApi_ApplySoundFont0Changes(u8* ramAddr) {
     uintptr_t* fontData = (uintptr_t*)ramAddr;
     u32 i;
 
@@ -93,11 +93,11 @@ void AudioApi_ApplySoundFontChanges(u8* ramAddr) {
     }
 }
 
-void AudioApi_LoadSoundFont(s32 id, u8* ramAddr) {
-    if (id == 0) {
-        AudioApi_ApplySoundFontChanges(ramAddr);
+void AudioApi_LoadSoundFont(u8* ramAddr, s32 fontId) {
+    if (fontId == 0) {
+        AudioApi_ApplySoundFont0Changes(ramAddr);
     }
-    AudioApi_onLoadSoundFont(id, ramAddr);
+    AudioApi_onLoadSoundFont(ramAddr, fontId);
 }
 
 SoundEffect* AudioApi_CopySoundEffect(SoundEffect* src) {

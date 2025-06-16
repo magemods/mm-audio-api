@@ -3,22 +3,23 @@
 #include "recomputils.h"
 #include "load.h"
 
-RECOMP_DECLARE_EVENT(AudioApi_onLoadSequence(s32 id, u8* ramAddr));
+RECOMP_DECLARE_EVENT(AudioApi_onLoadSequence(u8* ramAddr, s32 seqId));
 
-RECOMP_EXPORT s16 AudioApi_AddSequence(AudioTableEntry entry) {
+RECOMP_EXPORT s32 AudioApi_AddSequence(AudioTableEntry entry) {
     return AudioApi_AddTableEntry(&gAudioCtx.sequenceTable, entry);
 }
 
-RECOMP_EXPORT void AudioApi_ReplaceSequence(s16 id, AudioTableEntry entry) {
-    AudioApi_ReplaceTableEntry(gAudioCtx.sequenceTable, id, entry);
+RECOMP_EXPORT void AudioApi_ReplaceSequence(AudioTableEntry entry, s32 seqId) {
+    AudioApi_ReplaceTableEntry(gAudioCtx.sequenceTable, entry, seqId);
+
 }
 
-RECOMP_EXPORT void AudioApi_RestoreSequence(s16 id) {
-    AudioApi_RestoreTableEntry(gAudioCtx.sequenceTable, id);
+RECOMP_EXPORT void AudioApi_RestoreSequence(s32 seqId) {
+    AudioApi_RestoreTableEntry(gAudioCtx.sequenceTable, seqId);
 }
 
-void AudioApi_LoadSequence(s32 id, u8* ramAddr) {
-    if (id == 0) {
+void AudioApi_LoadSequence(u8* ramAddr, s32 seqId) {
+    if (seqId == 0) {
     }
-    AudioApi_onLoadSequence(id, ramAddr);
+    AudioApi_onLoadSequence(ramAddr, seqId);
 }
