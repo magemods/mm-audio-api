@@ -1,7 +1,123 @@
-#include "soundfont.h"
 #include "global.h"
 #include "modding.h"
+#include "recompdata.h"
 #include "recomputils.h"
+
+RECOMP_DECLARE_EVENT(AudioApi_onLoadSoundFont(s32 id, u8* ramAddr));
+
+SoundEffect* AudioApi_CopySoundEffect(SoundEffect* src);
+Instrument* AudioApi_CopyInstrument(Instrument* src);
+Sample* AudioApi_CopySample(Sample* src);
+
+void AudioApi_FreeSoundEffect(SoundEffect* sfx);
+void AudioApi_FreeInstrument(Instrument* instrument);
+void AudioApi_FreeSample(Sample* sample);
+
+typedef struct {
+    s32 id;
+    void* value;
+} SoundFontMapEntry;
+
+U32MemoryHashmapHandle drumMap;
+U32MemoryHashmapHandle sfxMap;
+U32MemoryHashmapHandle instrumentMap;
+
+RECOMP_CALLBACK("*", recomp_on_init) void AudioApi_SoundFontInit() {
+    drumMap = recomputil_create_u32_memory_hashmap(sizeof(SoundFontMapEntry));
+    sfxMap = recomputil_create_u32_memory_hashmap(sizeof(SoundFontMapEntry));
+    instrumentMap = recomputil_create_u32_memory_hashmap(sizeof(SoundFontMapEntry));
+}
+
+RECOMP_EXPORT int AudioApi_ReplaceSoundEffect(s32 id, SoundEffect* sfx) {
+    SoundEffect* copy = AudioApi_CopySoundEffect(sfx);
+    if (!copy) return 0;
+
+    SoundFontMapEntry entry = { id, copy };
+
+    u32 count = recomputil_u32_memory_hashmap_size(sfxMap);
+    if (!recomputil_u32_memory_hashmap_create(sfxMap, count)) {
+        AudioApi_FreeSoundEffect(copy);
+        return 0;
+    }
+
+    SoundFontMapEntry* entryAddr = recomputil_u32_memory_hashmap_get(sfxMap, count);
+    if (!entryAddr) {
+        AudioApi_FreeSoundEffect(copy);
+        return 0;
+    }
+
+    *entryAddr = entry;
+    return 1;
+}
+
+RECOMP_EXPORT int AudioApi_ReplaceInstrument(s32 id, Instrument* instrument) {
+    Instrument* copy = AudioApi_CopyInstrument(instrument);
+    if (!copy) return 0;
+
+    SoundFontMapEntry entry = { id, copy };
+
+    u32 count = recomputil_u32_memory_hashmap_size(instrumentMap);
+    if (!recomputil_u32_memory_hashmap_create(instrumentMap, count)) {
+        AudioApi_FreeInstrument(copy);
+        return 0;
+    }
+
+    SoundFontMapEntry* entryAddr = recomputil_u32_memory_hashmap_get(instrumentMap, count);
+    if (!entryAddr) {
+        AudioApi_FreeInstrument(copy);
+        return 0;
+    }
+
+    *entryAddr = entry;
+    return 1;
+}
+
+void AudioApi_ApplySoundFontChanges(u8* ramAddr) {
+    uintptr_t* fontData = (uintptr_t*)ramAddr;
+    u32 i;
+
+    for (i = 0; i < recomputil_u32_memory_hashmap_size(instrumentMap); i++) {
+        SoundFontMapEntry* entry = recomputil_u32_memory_hashmap_get(instrumentMap, i);
+        if (!entry) continue;
+
+        Instrument* instrument = (Instrument*)(ramAddr + fontData[2 + entry->id]);
+        *instrument = *(Instrument*)entry->value;
+    }
+
+    for (i = 0; i < recomputil_u32_memory_hashmap_size(sfxMap); i++) {
+        SoundFontMapEntry* entry = recomputil_u32_memory_hashmap_get(sfxMap, i);
+        if (!entry) continue;
+
+        SoundEffect* sfx = (SoundEffect*)(ramAddr + fontData[1] + entry->id);
+        *sfx = *(SoundEffect*)entry->value;
+    }
+}
+
+void AudioApi_LoadSoundFont(s32 id, u8* ramAddr) {
+    if (id == 0) {
+        AudioApi_ApplySoundFontChanges(ramAddr);
+    }
+    AudioApi_onLoadSoundFont(id, ramAddr);
+}
+
+SoundEffect* AudioApi_CopySoundEffect(SoundEffect* src) {
+    if (!src) return NULL;
+
+    SoundEffect* copy = recomp_alloc(sizeof(SoundEffect));
+    if (!copy) return NULL;
+
+    Lib_MemCpy(copy, src, sizeof(SoundEffect));
+
+    if (src->tunedSample.sample) {
+        copy->tunedSample.sample = AudioApi_CopySample(src->tunedSample.sample);
+        if (!copy->tunedSample.sample) {
+            AudioApi_FreeSoundEffect(copy);
+            return NULL;
+        }
+    }
+
+    return copy;
+}
 
 Instrument* AudioApi_CopyInstrument(Instrument* src) {
     if (!src) return NULL;
@@ -54,25 +170,6 @@ Instrument* AudioApi_CopyInstrument(Instrument* src) {
     return copy;
 }
 
-SoundEffect* AudioApi_CopySoundEffect(SoundEffect* src) {
-    if (!src) return NULL;
-
-    SoundEffect* copy = recomp_alloc(sizeof(SoundEffect));
-    if (!copy) return NULL;
-
-    Lib_MemCpy(copy, src, sizeof(SoundEffect));
-
-    if (src->tunedSample.sample) {
-        copy->tunedSample.sample = AudioApi_CopySample(src->tunedSample.sample);
-        if (!copy->tunedSample.sample) {
-            AudioApi_FreeSoundEffect(copy);
-            return NULL;
-        }
-    }
-
-    return copy;
-}
-
 Sample* AudioApi_CopySample(Sample* src) {
     if (!src) return NULL;
 
@@ -111,6 +208,12 @@ Sample* AudioApi_CopySample(Sample* src) {
     return copy;
 }
 
+void AudioApi_FreeSoundEffect(SoundEffect* sfx) {
+    if (!sfx) return;
+    if (sfx->tunedSample.sample) AudioApi_FreeSample(sfx->tunedSample.sample);
+    recomp_free(sfx);
+}
+
 void AudioApi_FreeInstrument(Instrument* instrument) {
     if (!instrument) return;
     if (instrument->envelope) recomp_free(instrument->envelope);
@@ -120,14 +223,7 @@ void AudioApi_FreeInstrument(Instrument* instrument) {
     recomp_free(instrument);
 }
 
-void AudioApi_FreeSoundEffect(SoundEffect* sfx) {
-    if (!sfx) return;
-    if (sfx->tunedSample.sample) AudioApi_FreeSample(sfx->tunedSample.sample);
-    recomp_free(sfx);
-}
-
 void AudioApi_FreeSample(Sample* sample) {
-    recomp_printf("something failed\n");
     if (!sample) return;
     if (sample->loop) recomp_free(sample->loop);
     if (sample->book) recomp_free(sample->book);
