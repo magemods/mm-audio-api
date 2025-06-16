@@ -276,17 +276,19 @@ RECOMP_HOOK_RETURN("AudioLoad_SyncDma") void AudioLoad_afterSyncDma() {
     AudioTableEntry* entry;
     s32 id;
 
-    for (id = 0; id < gAudioCtx.sequenceTable->header.numEntries; id++) {
-        AudioTableEntry* entry = &gAudioCtx.sequenceTable->entries[id];
+    for (id = 0; id < gAudioCtx.soundFontTable->header.numEntries; id++) {
+        entry = &gAudioCtx.soundFontTable->entries[id];
         if (entry->romAddr == sDevAddr) {
-            AudioApi_LoadSequence(sRamAddr, id);
+            AudioApi_LoadSoundFont(sRamAddr, id);
+            return;
         }
     }
 
-    for (id = 0; id < gAudioCtx.soundFontTable->header.numEntries; id++) {
-        AudioTableEntry* entry = &gAudioCtx.soundFontTable->entries[id];
+    for (id = 0; id < gAudioCtx.sequenceTable->header.numEntries; id++) {
+        entry = &gAudioCtx.sequenceTable->entries[id];
         if (entry->romAddr == sDevAddr) {
-            AudioApi_LoadSoundFont(sRamAddr, id);
+            AudioApi_LoadSequence(sRamAddr, id);
+            return;
         }
     }
 }

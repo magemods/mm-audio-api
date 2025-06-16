@@ -87,9 +87,13 @@ RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
             { &mySample, 2.0f },
         };
 
-        AudioApi_ReplaceSoundEffect(&mySfx, 32); // does nothing?
-        //AudioApi_ReplaceSoundEffect(&mySfx, 196); // segfaults on launch
-        //AudioApi_ReplaceSoundEffect(&mySfx, 224); // works
+        AudioApi_ReplaceSoundEffect(&mySfx, 28);
+
+        mySfx.tunedSample.tuning = 2.05f;
+        AudioApi_ReplaceSoundEffect(&mySfx, 30);
+
+        mySfx.tunedSample.tuning = 2.1f;
+        AudioApi_ReplaceSoundEffect(&mySfx, 32);
     }
 
     {
@@ -109,9 +113,30 @@ RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
             { &mySample, 2.0f },
         };
 
-        // AudioApi_ReplaceSoundEffect(&mySfx, 33); // does nothing?
-        // AudioApi_ReplaceSoundEffect(&mySfx, 197); // segfault on launch
-        // AudioApi_ReplaceSoundEffect(&mySfx, 225); // segfault on attack
+        AudioApi_ReplaceSoundEffect(&mySfx, 29);
+
+        mySfx.tunedSample.tuning = 2.1f;
+        AudioApi_ReplaceSoundEffect(&mySfx, 31);
+    }
+
+    {
+        AdpcmLoop mySample_LOOP = {
+            { 0, (attack3_end - attack3) / 2, 0, 0 }, {}
+        };
+
+        Sample mySample = {
+            0, CODEC_S16, MEDIUM_CART, false, false,
+            attack3_end - attack3,
+            attack3,
+            &mySample_LOOP,
+            NULL
+        };
+
+        SoundEffect mySfx = {
+            { &mySample, 2.0f },
+        };
+
+        AudioApi_ReplaceSoundEffect(&mySfx, 33);
     }
 }
 

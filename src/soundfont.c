@@ -76,20 +76,25 @@ void AudioApi_ApplySoundFont0Changes(u8* ramAddr) {
     uintptr_t* fontData = (uintptr_t*)ramAddr;
     u32 i;
 
+    // The first u32 in fontData is an offset to a list of offsets to the drums
+    // The second u32 in fontData is an offset to the first sound effect entry
+    // Starting from the 3rd u32 in fontData is the list of offsets to the instruments
+
+    for (i = 0; i < recomputil_u32_memory_hashmap_size(sfxMap); i++) {
+        SoundFontMapEntry* entry = recomputil_u32_memory_hashmap_get(sfxMap, i);
+        if (!entry) continue;
+
+        SoundEffect* sfx = (SoundEffect*)(ramAddr + fontData[1]) + entry->id;
+        *sfx = *(SoundEffect*)entry->value;
+    }
+
+
     for (i = 0; i < recomputil_u32_memory_hashmap_size(instrumentMap); i++) {
         SoundFontMapEntry* entry = recomputil_u32_memory_hashmap_get(instrumentMap, i);
         if (!entry) continue;
 
         Instrument* instrument = (Instrument*)(ramAddr + fontData[2 + entry->id]);
         *instrument = *(Instrument*)entry->value;
-    }
-
-    for (i = 0; i < recomputil_u32_memory_hashmap_size(sfxMap); i++) {
-        SoundFontMapEntry* entry = recomputil_u32_memory_hashmap_get(sfxMap, i);
-        if (!entry) continue;
-
-        SoundEffect* sfx = (SoundEffect*)(ramAddr + fontData[1] + entry->id);
-        *sfx = *(SoundEffect*)entry->value;
     }
 }
 
