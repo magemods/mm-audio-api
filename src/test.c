@@ -39,6 +39,10 @@ RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
 
         AudioApi_ReplaceSequence(mySeq, NA_BGM_FILE_SELECT);
         AudioApi_SetSequenceFontId(NA_BGM_FILE_SELECT, 0, 3);
+
+        // Also add as a new sequence (seqId = 128)
+        s32 newSeqId = AudioApi_AddSequence(mySeq);
+        AudioApi_SetSequenceFontId(newSeqId, 0, 3);
     }
 
     {
