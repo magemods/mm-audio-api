@@ -45,6 +45,12 @@ RECOMP_EXPORT void AudioApi_SetSequenceFontId(s32 seqId, s32 fontNum, s32 fontId
     *seqFontEntry = fontId;
 }
 
+RECOMP_EXPORT void AudioApi_SetSequenceFlags(s32 seqId, u8 flags) {
+    if (seqId >= gAudioCtx.sequenceTable->header.numEntries) return;
+
+    sExtSeqFlags[seqId] = flags;
+}
+
 void AudioApi_LoadSequence(u8* ramAddr, s32 seqId) {
     if (seqId == 0) {
     }

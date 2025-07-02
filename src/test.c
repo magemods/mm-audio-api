@@ -14,6 +14,7 @@ RECOMP_IMPORT(".", s16 AudioApi_AddSequence(AudioTableEntry* entry));
 RECOMP_IMPORT(".", void AudioApi_ReplaceSequence(AudioTableEntry* entry, s32 seqId));
 RECOMP_IMPORT(".", void AudioApi_RestoreSequence(s32 seqId));
 RECOMP_IMPORT(".", void AudioApi_SetSequenceFontId(s32 seqId, s32 fontNum, s32 fontId));
+RECOMP_IMPORT(".", void AudioApi_SetSequenceFlags(s32 seqId, u8 flags));
 RECOMP_IMPORT(".", void AudioApi_ReplaceSoundEffect(SoundEffect* sfx, s32 sfxId));
 RECOMP_IMPORT(".", void AudioApi_ReplaceInstrument(Instrument* instrument, s32 instId));
 
