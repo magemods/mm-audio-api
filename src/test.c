@@ -10,8 +10,8 @@ INCBIN(attack1, "src/test/attack1.raw");
 INCBIN(attack2, "src/test/attack2.raw");
 INCBIN(attack3, "src/test/attack3.raw");
 
-RECOMP_IMPORT(".", s16 AudioApi_AddSequence(AudioTableEntry entry));
-RECOMP_IMPORT(".", void AudioApi_ReplaceSequence(AudioTableEntry entry, s32 seqId));
+RECOMP_IMPORT(".", s16 AudioApi_AddSequence(AudioTableEntry* entry));
+RECOMP_IMPORT(".", void AudioApi_ReplaceSequence(AudioTableEntry* entry, s32 seqId));
 RECOMP_IMPORT(".", void AudioApi_RestoreSequence(s32 seqId));
 RECOMP_IMPORT(".", void AudioApi_SetSequenceFontId(s32 seqId, s32 fontNum, s32 fontId));
 RECOMP_IMPORT(".", void AudioApi_ReplaceSoundEffect(SoundEffect* sfx, s32 sfxId));
@@ -37,11 +37,11 @@ RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
             0, 0, 0,                 // shortData
         };
 
-        AudioApi_ReplaceSequence(mySeq, NA_BGM_FILE_SELECT);
+        AudioApi_ReplaceSequence(&mySeq, NA_BGM_FILE_SELECT);
         AudioApi_SetSequenceFontId(NA_BGM_FILE_SELECT, 0, 3);
 
         // Also add as a new sequence (seqId = 128)
-        s32 newSeqId = AudioApi_AddSequence(mySeq);
+        s32 newSeqId = AudioApi_AddSequence(&mySeq);
         AudioApi_SetSequenceFontId(newSeqId, 0, 3);
     }
 

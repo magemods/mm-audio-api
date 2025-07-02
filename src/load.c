@@ -21,7 +21,7 @@ AudioTable* AudioApi_CopyTable(AudioTable* table) {
     return newTable;
 }
 
-s32 AudioApi_AddTableEntry(AudioTable** tablePtr, AudioTableEntry entry) {
+s32 AudioApi_AddTableEntry(AudioTable** tablePtr, AudioTableEntry* entry) {
     AudioTable* table = *tablePtr;
     size_t count = table->header.numEntries + 1;
     size_t size = sizeof(AudioTableHeader) + count * sizeof(AudioTableEntry);
@@ -32,16 +32,16 @@ s32 AudioApi_AddTableEntry(AudioTable** tablePtr, AudioTableEntry entry) {
     Lib_MemCpy(newTable, table, size - sizeof(AudioTableEntry));
     recomp_free(table);
 
-    newTable->entries[count - 1] = entry;
+    newTable->entries[count - 1] = *entry;
     newTable->header.numEntries = count;
 
     *tablePtr = newTable;
     return count - 1;
 }
 
-void AudioApi_ReplaceTableEntry(AudioTable* table, AudioTableEntry entry, s32 id) {
+void AudioApi_ReplaceTableEntry(AudioTable* table, AudioTableEntry* entry, s32 id) {
     if (id < table->header.numEntries) {
-        table->entries[id] = entry;
+        table->entries[id] = *entry;
     }
 }
 

@@ -5,7 +5,7 @@
 
 RECOMP_DECLARE_EVENT(AudioApi_onLoadSequence(u8* ramAddr, s32 seqId));
 
-RECOMP_EXPORT s32 AudioApi_AddSequence(AudioTableEntry entry) {
+RECOMP_EXPORT s32 AudioApi_AddSequence(AudioTableEntry* entry) {
     s32 seqId = AudioApi_AddTableEntry(&gAudioCtx.sequenceTable, entry);
     if (seqId != 0) {
         gAudioCtx.numSequences = gAudioCtx.sequenceTable->header.numEntries;
@@ -13,7 +13,7 @@ RECOMP_EXPORT s32 AudioApi_AddSequence(AudioTableEntry entry) {
     return seqId;
 }
 
-RECOMP_EXPORT void AudioApi_ReplaceSequence(AudioTableEntry entry, s32 seqId) {
+RECOMP_EXPORT void AudioApi_ReplaceSequence(AudioTableEntry* entry, s32 seqId) {
     AudioApi_ReplaceTableEntry(gAudioCtx.sequenceTable, entry, seqId);
 }
 
