@@ -259,6 +259,100 @@ RECOMP_PATCH s32 AudioLoad_Dma(OSIoMesg* mesg, u32 priority, s32 direction, uint
     }
 }
 
+RECOMP_PATCH void* AudioLoad_DmaSampleData(uintptr_t devAddr, size_t size, s32 arg2, u8* dmaIndexRef, s32 medium) {
+    s32 pad1;
+    SampleDma* dma;
+    s32 hasDma = false;
+    uintptr_t dmaDevAddr;
+    u32 pad2;
+    u32 dmaIndex;
+    u32 transfer;
+    s32 bufferPos;
+    u32 i;
+
+    if (arg2 || (*dmaIndexRef >= gAudioCtx.sampleDmaListSize1)) {
+        for (i = gAudioCtx.sampleDmaListSize1; i < gAudioCtx.sampleDmaCount; i++) {
+            dma = &gAudioCtx.sampleDmas[i];
+            bufferPos = devAddr - dma->devAddr;
+            if ((0 <= bufferPos) && ((u32)bufferPos <= (dma->size - size))) {
+                // We already have a DMA request for this memory range.
+                if ((dma->ttl == 0) && (gAudioCtx.sampleDmaReuseQueue2RdPos != gAudioCtx.sampleDmaReuseQueue2WrPos)) {
+                    // Move the DMA out of the reuse queue, by swapping it with the
+                    // read pos, and then incrementing the read pos.
+                    if (dma->reuseIndex != gAudioCtx.sampleDmaReuseQueue2RdPos) {
+                        gAudioCtx.sampleDmaReuseQueue2[dma->reuseIndex] =
+                            gAudioCtx.sampleDmaReuseQueue2[gAudioCtx.sampleDmaReuseQueue2RdPos];
+                        gAudioCtx.sampleDmas[gAudioCtx.sampleDmaReuseQueue2[gAudioCtx.sampleDmaReuseQueue2RdPos]]
+                            .reuseIndex = dma->reuseIndex;
+                    }
+                    gAudioCtx.sampleDmaReuseQueue2RdPos++;
+                }
+                dma->ttl = 32;
+                *dmaIndexRef = (u8)i;
+                return dma->ramAddr + (devAddr - dma->devAddr);
+            }
+        }
+
+        if (!arg2) {
+            goto search_short_lived;
+        }
+
+        if ((gAudioCtx.sampleDmaReuseQueue2RdPos != gAudioCtx.sampleDmaReuseQueue2WrPos) && arg2) {
+            // Allocate a DMA from reuse queue 2, unless full.
+            dmaIndex = gAudioCtx.sampleDmaReuseQueue2[gAudioCtx.sampleDmaReuseQueue2RdPos];
+            gAudioCtx.sampleDmaReuseQueue2RdPos++;
+            dma = gAudioCtx.sampleDmas + dmaIndex;
+            hasDma = true;
+        }
+    } else {
+    search_short_lived:
+        dma = gAudioCtx.sampleDmas + *dmaIndexRef;
+        i = 0;
+    again:
+        bufferPos = devAddr - dma->devAddr;
+        if (0 <= bufferPos && (u32)bufferPos <= dma->size - size) {
+            // We already have DMA for this memory range.
+            if (dma->ttl == 0) {
+                // Move the DMA out of the reuse queue, by swapping it with the
+                // read pos, and then incrementing the read pos.
+                if (dma->reuseIndex != gAudioCtx.sampleDmaReuseQueue1RdPos) {
+                    gAudioCtx.sampleDmaReuseQueue1[dma->reuseIndex] =
+                        gAudioCtx.sampleDmaReuseQueue1[gAudioCtx.sampleDmaReuseQueue1RdPos];
+                    gAudioCtx.sampleDmas[gAudioCtx.sampleDmaReuseQueue1[gAudioCtx.sampleDmaReuseQueue1RdPos]]
+                        .reuseIndex = dma->reuseIndex;
+                }
+                gAudioCtx.sampleDmaReuseQueue1RdPos++;
+            }
+            dma->ttl = 2;
+            return dma->ramAddr + (devAddr - dma->devAddr);
+        }
+        dma = gAudioCtx.sampleDmas + i++;
+        if (i <= gAudioCtx.sampleDmaListSize1) {
+            goto again;
+        }
+    }
+
+    if (!hasDma) {
+        if (gAudioCtx.sampleDmaReuseQueue1RdPos == gAudioCtx.sampleDmaReuseQueue1WrPos) {
+            return NULL;
+        }
+        // Allocate a DMA from reuse queue 1.
+        dmaIndex = gAudioCtx.sampleDmaReuseQueue1[gAudioCtx.sampleDmaReuseQueue1RdPos++];
+        dma = gAudioCtx.sampleDmas + dmaIndex;
+        hasDma = true;
+    }
+
+    transfer = dma->size;
+    dmaDevAddr = devAddr & ~0xF;
+    dma->ttl = 3;
+    dma->devAddr = dmaDevAddr;
+    dma->sizeUnused = transfer;
+    AudioLoad_Dma(&gAudioCtx.currAudioFrameDmaIoMesgBuf[gAudioCtx.curAudioFrameDmaCount++], OS_MESG_PRI_NORMAL, OS_READ,
+                  dmaDevAddr, dma->ramAddr, transfer, &gAudioCtx.curAudioFrameDmaQueue, medium, "SUPERDMA");
+    *dmaIndexRef = dmaIndex;
+    return (devAddr - dmaDevAddr) + dma->ramAddr;
+}
+
 /* -------------------------------------------------------------------------- */
 
 void AudioApi_LoadSoundFont(u8* ramAddr, s32 fontId);
