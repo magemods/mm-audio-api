@@ -5,7 +5,7 @@
 #include "audio/soundfont_file.h"
 
 INCBIN(sequence, "src/test/DetectiveSky612-DanceOfDeath.zseq");
-INCBIN(rickroll, "src/test/rickroll32kHz.raw");
+INCBIN(rickroll, "src/test/rickroll32kHzmono.raw");
 INCBIN(attack1, "src/test/attack1.raw");
 INCBIN(attack2, "src/test/attack2.raw");
 INCBIN(attack3, "src/test/attack3.raw");
@@ -68,7 +68,7 @@ RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
             251,
             myEnv,
             INSTR_SAMPLE_NONE,
-            { &mySample, 4.0f },
+            { &mySample, 1.0f },
             INSTR_SAMPLE_NONE,
         };
 
