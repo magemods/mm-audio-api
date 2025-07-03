@@ -319,7 +319,7 @@ RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* samp
 
                     case CODEC_S16:
                         // @mod
-                        sampleDataChunkSize = ALIGN16(numSamplesToLoadAdj * SAMPLE_SIZE);
+                        sampleDataChunkSize = ALIGN16(MIN(numSamplesToProcess, numSamplesUntilEnd) * SAMPLE_SIZE);
                         samplesToLoadAddr =
                             AudioLoad_DmaSampleData((uintptr_t)(sampleAddr + synthState->samplePosInt * SAMPLE_SIZE),
                                                     sampleDataChunkSize, flags,

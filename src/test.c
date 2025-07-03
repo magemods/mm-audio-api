@@ -68,7 +68,7 @@ RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
             251,
             myEnv,
             INSTR_SAMPLE_NONE,
-            { &mySample, 2.0f },
+            { &mySample, 4.0f },
             INSTR_SAMPLE_NONE,
         };
 
