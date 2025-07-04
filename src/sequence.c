@@ -17,14 +17,18 @@ u8* sExtSeqLoadStatus = gAudioCtx.seqLoadStatus;
 
 void AudioApi_SequenceQueueDrain(AudioApiCmd* cmd);
 bool AudioApi_GrowSequenceTables();
-bool AudioApi_RelocateSequenceFontTable();
+u8* AudioApi_RebuildSequenceFontTable(u16 oldCapacity, u16 newCapacity);
 
 RECOMP_DECLARE_EVENT(AudioApi_SequenceLoaded(s32 seqId, u8* ramAddr));
 
 RECOMP_CALLBACK(".", AudioApi_InitInternal) void AudioApi_SequenceInit() {
     sequenceQueue = AudioApi_QueueCreate();
-    if (!AudioApi_RelocateSequenceFontTable()) {
-        recomp_printf("AudioApi: Error relocating sequence font table\n");
+
+    u8* newSeqFontTable = AudioApi_RebuildSequenceFontTable(sequenceTableCapacity, sequenceTableCapacity);
+    if (newSeqFontTable != NULL) {
+        gAudioCtx.sequenceFontTable = newSeqFontTable;
+    } else {
+        recomp_printf("AudioApi: Error rebuilding sequence font table\n");
     }
 }
 
@@ -218,14 +222,10 @@ bool AudioApi_GrowSequenceTables() {
     Lib_MemCpy(newSeqTable, gAudioCtx.sequenceTable, oldSize);
 
     // Grow gAudioCtx.sequenceFontTable
-    oldSize = (sizeof(u16) + MAX_FONTS_PER_SEQUENCE + 1) * oldCapacity;
-    newSize = (sizeof(u16) + MAX_FONTS_PER_SEQUENCE + 1) * newCapacity;
-    newSeqFontTable = recomp_alloc(newSize);
-    if (!newSeqFontTable) {
+    newSeqFontTable = AudioApi_RebuildSequenceFontTable(oldCapacity, newCapacity);
+    if (newSeqFontTable == NULL) {
         goto cleanup;
     }
-    Lib_MemSet(newSeqFontTable, 0, newSize);
-    Lib_MemCpy(newSeqFontTable, gAudioCtx.sequenceFontTable, oldSize);
 
     // Grow sExtSeqFlags
     oldSize = sizeof(u8) * oldCapacity;
@@ -254,6 +254,7 @@ bool AudioApi_GrowSequenceTables() {
     if (IS_MOD_MEMORY(sExtSeqLoadStatus)) recomp_free(sExtSeqLoadStatus);
 
     // Store new tables
+    recomp_printf("AudioApi: Resized sequences tables to %d\n", newCapacity);
     gAudioCtx.sequenceTable = newSeqTable;
     gAudioCtx.sequenceFontTable = newSeqFontTable;
     sExtSeqFlags = newSeqFlags;
@@ -262,6 +263,7 @@ bool AudioApi_GrowSequenceTables() {
     return true;
 
  cleanup:
+    recomp_printf("AudioApi: Error resizing sequences tables to %d\n", newCapacity);
     if (newSeqTable != NULL) {
         recomp_free(newSeqTable);
     }
@@ -277,42 +279,42 @@ bool AudioApi_GrowSequenceTables() {
     return false;
 }
 
-bool AudioApi_RelocateSequenceFontTable() {
+u8* AudioApi_RebuildSequenceFontTable(u16 oldCapacity, u16 newCapacity) {
     // The sequence font table is a bit strange.
     // You're supposed to cast it to an array of u16 and read the entry at the specified seqId.
     // That gives you the offset from the start of the table when reading it as an array of u8.
     // This is done because each sequence can have a variable number of fonts, although in the
     // vanilla ROM only sequence 0 has two fonts, while the rest have one.
     // We want to support more fonts per sequence, but we don't want to be constantly resizing
-    // the table each time. We will resize it so each sequence can support up to four fonts.
+    // the table each time, so we will resize it so each sequence can support up to four fonts.
 
-    size_t newSize = (sizeof(u16) + MAX_FONTS_PER_SEQUENCE + 1) * sequenceTableCapacity;
+    size_t newSize = (sizeof(u16) + MAX_FONTS_PER_SEQUENCE + 1) * newCapacity;
     u8* newSeqFontTable = recomp_alloc(newSize);
 
     if (!newSeqFontTable) {
-        return false;
+        return NULL;
     }
     Lib_MemSet(newSeqFontTable, 0, newSize);
 
     u16* header = (u16*)newSeqFontTable;
-    u8* entries = newSeqFontTable + sizeof(u16) * sequenceTableCapacity;
+    u8* entries = newSeqFontTable + sizeof(u16) * newCapacity;
 
-    for (u16 seqId = 0; seqId < NA_BGM_MAX; seqId++) {
+    for (u16 seqId = 0; seqId < newCapacity; seqId++) {
         // Write the offset into the header
-        header[seqId] = ((uintptr_t) entries - (uintptr_t) header) + (seqId * (MAX_FONTS_PER_SEQUENCE + 1));
-        //header[seqId] = (sizeof(u16) * sequenceTableCapacity) + (seqId * (MAX_FONTS_PER_SEQUENCE + 1));
+        header[seqId] = (sizeof(u16) * newCapacity) + (seqId * (MAX_FONTS_PER_SEQUENCE + 1));
 
         // Find the entry in the old table and read the number of fonts
-        s32 index = ((u16*)gAudioCtx.sequenceFontTable)[seqId];
-        u8* entry = &gAudioCtx.sequenceFontTable[index];
-        u8 numFonts = entry[0];
+        if (seqId < oldCapacity) {
+            s32 index = ((u16*)gAudioCtx.sequenceFontTable)[seqId];
+            u8* entry = &gAudioCtx.sequenceFontTable[index];
+            u8 numFonts = entry[0];
 
-        // Copy old entry into new table
-        Lib_MemCpy(entries + seqId * (MAX_FONTS_PER_SEQUENCE + 1), entry, numFonts + 1);
+            // Copy old entry into new table
+            Lib_MemCpy(entries + seqId * (MAX_FONTS_PER_SEQUENCE + 1), entry, numFonts + 1);
+        }
     }
 
-    gAudioCtx.sequenceFontTable = newSeqFontTable;
-    return true;
+    return newSeqFontTable;
 }
 
 // gAudioCtx.seqLoadStatus has 128 max entries, so anything higher will read/write from our own array
