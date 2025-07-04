@@ -1,10 +1,16 @@
 #include "global.h"
 #include "modding.h"
 #include "recomputils.h"
+#include "queue.h"
 
-RECOMP_DECLARE_EVENT(AudioApi_preInit());
-RECOMP_DECLARE_EVENT(AudioApi_onInit());
-RECOMP_DECLARE_EVENT(AudioApi_afterSyncDma(uintptr_t devAddr, u8* ramAddr));
+// Internal events
+RECOMP_DECLARE_EVENT(AudioApi_InitInternal());
+RECOMP_DECLARE_EVENT(AudioApi_ReadyInternal());
+
+// Public events
+RECOMP_DECLARE_EVENT(AudioApi_Init());
+RECOMP_DECLARE_EVENT(AudioApi_Ready());
+RECOMP_DECLARE_EVENT(AudioApi_AfterSyncDma(uintptr_t devAddr, u8* ramAddr));
 
 extern DmaHandler sDmaHandler;
 extern u8 gAudioHeap[0x138000];
@@ -115,11 +121,20 @@ RECOMP_PATCH void AudioLoad_Init(void* heap, size_t heapSize) {
     AudioLoad_InitTable(gAudioCtx.soundFontTable, SEGMENT_ROM_START(Audiobank), 0);
     AudioLoad_InitTable(gAudioCtx.sampleBankTable, SEGMENT_ROM_START(Audiotable), 0);
 
-    // @mod Call internal event to set up tables
-    AudioApi_preInit();
+    // @mod Dispatch internal event for API to initialize tables
+    AudioApi_InitInternal();
 
-    // @mod Call events for mods to register data
-    AudioApi_onInit();
+    // @mod Dispatch event for mods to queue audio changes
+    gAudioApiInitPhase = AUDIOAPI_INIT_QUEUEING;
+    AudioApi_Init();
+
+    // @mod Dispatch internal event for API to drain queues
+    gAudioApiInitPhase = AUDIOAPI_INIT_QUEUED;
+    AudioApi_ReadyInternal();
+
+    // @mod Dispatch event for mods to potentially interact with other mods
+    gAudioApiInitPhase = AUDIOAPI_INIT_READY;
+    AudioApi_Ready();
 
     gAudioCtx.numSequences = gAudioCtx.sequenceTable->header.numEntries;
 
@@ -309,5 +324,5 @@ RECOMP_HOOK("AudioLoad_SyncDma") void AudioLoad_onSyncDma(uintptr_t devAddr, u8*
 }
 
 RECOMP_HOOK_RETURN("AudioLoad_SyncDma") void AudioLoad_afterSyncDma() {
-    AudioApi_afterSyncDma(sDevAddr, sRamAddr);
+    AudioApi_AfterSyncDma(sDevAddr, sRamAddr);
 }

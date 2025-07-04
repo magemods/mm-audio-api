@@ -3,7 +3,7 @@
 #include "recompdata.h"
 #include "recomputils.h"
 
-RECOMP_DECLARE_EVENT(AudioApi_onLoadSoundFont(u8* ramAddr, s32 fontId));
+RECOMP_DECLARE_EVENT(AudioApi_SoundFontLoaded(s32 fontId, u8* ramAddr));
 
 SoundEffect* AudioApi_CopySoundEffect(SoundEffect* src);
 Instrument* AudioApi_CopyInstrument(Instrument* src);
@@ -98,17 +98,14 @@ void AudioApi_ApplySoundFont0Changes(u8* ramAddr) {
     }
 }
 
-RECOMP_CALLBACK(".", AudioApi_afterSyncDma) void AudioApi_DispatchSoundFontEvent(uintptr_t devAddr, u8* ramAddr) {
-    AudioTableEntry* entry;
-    s32 fontId;
-
-    for (fontId = 0; fontId < gAudioCtx.soundFontTable->header.numEntries; fontId++) {
-        entry = &gAudioCtx.soundFontTable->entries[fontId];
+RECOMP_CALLBACK(".", AudioApi_AfterSyncDma) void AudioApi_SoundFontAfterSyncDma(uintptr_t devAddr, u8* ramAddr) {
+    for (s32 fontId = 0; fontId < gAudioCtx.soundFontTable->header.numEntries; fontId++) {
+        AudioTableEntry* entry = &gAudioCtx.soundFontTable->entries[fontId];
         if (entry->romAddr == devAddr) {
             if (fontId == 0) {
                 AudioApi_ApplySoundFont0Changes(ramAddr);
             }
-            AudioApi_onLoadSoundFont(ramAddr, fontId);
+            AudioApi_SoundFontLoaded(fontId, ramAddr);
             return;
         }
     }

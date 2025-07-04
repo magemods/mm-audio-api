@@ -2,6 +2,7 @@
 #include "modding.h"
 #include "recompdata.h"
 #include "recomputils.h"
+#include "queue.h"
 #include "util.h"
 
 #define MAX_FONTS_PER_SEQUENCE 4
@@ -10,22 +11,32 @@ extern u8 sSeqFlags[];
 extern u32 AudioLoad_GetRealTableIndex(s32 tableType, u32 id);
 extern void* AudioLoad_SyncLoad(s32 tableType, u32 id, s32* didAllocate);
 
+AudioApiQueue* sequenceQueue;
 u16 sequenceTableCapacity = NA_BGM_MAX;
 u8* sExtSeqFlags = sSeqFlags;
 u8* sExtSeqLoadStatus = gAudioCtx.seqLoadStatus;
 
+void AudioApi_SequenceQueueDrain(AudioApiCmd* cmd);
 bool AudioApi_GrowSequenceTables();
 bool AudioApi_RelocateSequenceFontTable();
 
-RECOMP_DECLARE_EVENT(AudioApi_onLoadSequence(u8* ramAddr, s32 seqId));
+RECOMP_DECLARE_EVENT(AudioApi_SequenceLoaded(s32 seqId, u8* ramAddr));
 
-RECOMP_CALLBACK(".", AudioApi_preInit) void AudioApi_SequenceInitInternal() {
+RECOMP_CALLBACK(".", AudioApi_InitInternal) void AudioApi_SequenceInit() {
+    sequenceQueue = AudioApi_QueueCreate();
     if (!AudioApi_RelocateSequenceFontTable()) {
         recomp_printf("AudioApi: Error relocating sequence font table\n");
     }
 }
 
+RECOMP_CALLBACK(".", AudioApi_ReadyInternal) void AudioApi_SequenceReady() {
+    AudioApi_QueueDrain(sequenceQueue, AudioApi_SequenceQueueDrain);
+}
+
 RECOMP_EXPORT s32 AudioApi_AddSequence(AudioTableEntry* entry) {
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_NOT_READY) {
+        return -1;
+    }
     s32 newSeqId = gAudioCtx.sequenceTable->header.numEntries;
     if ((newSeqId & 0xFF) == 0xFF) {
         newSeqId++;
@@ -41,6 +52,18 @@ RECOMP_EXPORT s32 AudioApi_AddSequence(AudioTableEntry* entry) {
 }
 
 RECOMP_EXPORT void AudioApi_ReplaceSequence(s32 seqId, AudioTableEntry* entry) {
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_NOT_READY) {
+        return;
+    }
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING) {
+        AudioTableEntry* copy = recomp_alloc(sizeof(AudioTableEntry));
+        if (!copy) {
+            return;
+        }
+        *copy = *entry;
+        AudioApi_QueueCmd(sequenceQueue, AUDIOAPI_CMD_OP_REPLACE_SEQUENCE, seqId, 0, (void**)&copy);
+        return;
+    }
     if (seqId >= gAudioCtx.sequenceTable->header.numEntries) {
         return;
     }
@@ -48,6 +71,9 @@ RECOMP_EXPORT void AudioApi_ReplaceSequence(s32 seqId, AudioTableEntry* entry) {
 }
 
 RECOMP_EXPORT void AudioApi_RestoreSequence(s32 seqId) {
+    if (gAudioApiInitPhase < AUDIOAPI_INIT_READY) {
+        return;
+    }
     AudioTable* origTable = (AudioTable*)gSequenceTable;
     if (seqId >= origTable->header.numEntries) {
         return;
@@ -56,6 +82,9 @@ RECOMP_EXPORT void AudioApi_RestoreSequence(s32 seqId) {
 }
 
 RECOMP_EXPORT s32 AudioApi_AddSequenceFont(s32 seqId, s32 fontId) {
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_NOT_READY) {
+        return -1;
+    }
     if (seqId >= gAudioCtx.sequenceTable->header.numEntries) {
         return -1;
     }
@@ -72,6 +101,13 @@ RECOMP_EXPORT s32 AudioApi_AddSequenceFont(s32 seqId, s32 fontId) {
 }
 
 RECOMP_EXPORT void AudioApi_ReplaceSequenceFont(s32 seqId, s32 fontNum, s32 fontId) {
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_NOT_READY) {
+        return;
+    }
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING) {
+        AudioApi_QueueCmd(sequenceQueue, AUDIOAPI_CMD_OP_REPLACE_SEQUENCE_FONT, seqId, fontNum, (void**)&fontId);
+        return;
+    }
     if (seqId >= gAudioCtx.sequenceTable->header.numEntries || fontNum >= MAX_FONTS_PER_SEQUENCE) {
         return;
     }
@@ -86,6 +122,9 @@ RECOMP_EXPORT void AudioApi_ReplaceSequenceFont(s32 seqId, s32 fontNum, s32 font
 }
 
 RECOMP_EXPORT void AudioApi_RestoreSequenceFont(s32 seqId, s32 fontNum) {
+    if (gAudioApiInitPhase < AUDIOAPI_INIT_READY) {
+        return;
+    }
     if (seqId >= NA_BGM_MAX) {
         return;
     }
@@ -109,6 +148,13 @@ RECOMP_EXPORT void AudioApi_RestoreSequenceFont(s32 seqId, s32 fontNum) {
 }
 
 RECOMP_EXPORT void AudioApi_SetSequenceFlags(s32 seqId, u8 flags) {
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_NOT_READY) {
+        return;
+    }
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING) {
+        AudioApi_QueueCmd(sequenceQueue, AUDIOAPI_CMD_OP_REPLACE_SEQUENCE_FONT, seqId, 0, (void**)&flags);
+        return;
+    }
     if (seqId >= gAudioCtx.sequenceTable->header.numEntries) {
         return;
     }
@@ -116,19 +162,39 @@ RECOMP_EXPORT void AudioApi_SetSequenceFlags(s32 seqId, u8 flags) {
 }
 
 RECOMP_EXPORT void AudioApi_RestoreSequenceFlags(s32 seqId) {
+    if (gAudioApiInitPhase < AUDIOAPI_INIT_READY) {
+        return;
+    }
     if (seqId >= NA_BGM_MAX) {
         return;
     }
     sExtSeqFlags[seqId] = sSeqFlags[seqId];
 }
 
-RECOMP_CALLBACK(".", AudioApi_afterSyncDma) void AudioApi_DispatchSequenceEvent(uintptr_t devAddr, u8* ramAddr) {
+RECOMP_CALLBACK(".", AudioApi_AfterSyncDma) void AudioApi_SequenceAfterSyncDma(uintptr_t devAddr, u8* ramAddr) {
     for (s32 seqId = 0; seqId < gAudioCtx.sequenceTable->header.numEntries; seqId++) {
         AudioTableEntry* entry = &gAudioCtx.sequenceTable->entries[seqId];
         if (entry->romAddr == devAddr) {
-            AudioApi_onLoadSequence(ramAddr, seqId);
+            AudioApi_SequenceLoaded(seqId, ramAddr);
             return;
         }
+    }
+}
+
+void AudioApi_SequenceQueueDrain(AudioApiCmd* cmd) {
+    switch (cmd->op) {
+    case AUDIOAPI_CMD_OP_REPLACE_SEQUENCE:
+        AudioApi_ReplaceSequence(cmd->arg0, (AudioTableEntry*) cmd->asPtr);
+        recomp_free(cmd->asPtr);
+        break;
+    case AUDIOAPI_CMD_OP_REPLACE_SEQUENCE_FONT:
+        AudioApi_ReplaceSequenceFont(cmd->arg0, cmd->arg1, cmd->asInt);
+        break;
+    case AUDIOAPI_CMD_OP_SET_SEQUENCE_FLAGS:
+        AudioApi_SetSequenceFlags(cmd->arg0, cmd->asUbyte);
+        break;
+    default:
+        break;
     }
 }
 

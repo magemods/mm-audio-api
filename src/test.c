@@ -36,7 +36,7 @@ RECOMP_HOOK("Player_Update") void onPlayer_Update(Player* this, PlayState* play)
     }
 }
 
-RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
+RECOMP_CALLBACK(".", AudioApi_Init) void my_mod_on_init() {
 
     {
         // Replace the file select sequence with our own custom one
@@ -156,7 +156,7 @@ RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
     }
 }
 
-RECOMP_CALLBACK(".", AudioApi_onLoadSequence) void my_mod_on_load_sequence(u8* ramAddr, s32 seqId) {
+RECOMP_CALLBACK(".", AudioApi_SequenceLoaded) void my_mod_on_load_sequence(s32 seqId, u8* ramAddr) {
     // Here, we can modify sequence 0 in various ways.
     if (seqId == 0) {
 
