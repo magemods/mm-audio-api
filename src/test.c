@@ -10,12 +10,14 @@ INCBIN(attack1, "src/test/attack1.raw");
 INCBIN(attack2, "src/test/attack2.raw");
 INCBIN(attack3, "src/test/attack3.raw");
 
-RECOMP_IMPORT(".", s16 AudioApi_AddSequence(AudioTableEntry* entry));
+RECOMP_IMPORT(".", s32 AudioApi_AddSequence(AudioTableEntry* entry));
 RECOMP_IMPORT(".", void AudioApi_ReplaceSequence(s32 seqId, AudioTableEntry* entry));
 RECOMP_IMPORT(".", void AudioApi_RestoreSequence(s32 seqId));
-RECOMP_IMPORT(".", void AudioApi_AddSequenceFont(s32 seqId, s32 fontId));
+RECOMP_IMPORT(".", s32 AudioApi_AddSequenceFont(s32 seqId, s32 fontId));
 RECOMP_IMPORT(".", void AudioApi_ReplaceSequenceFont(s32 seqId, s32 fontNum, s32 fontId));
+RECOMP_IMPORT(".", void AudioApi_RestoreSequenceFont(s32 seqId, s32 fontNum));
 RECOMP_IMPORT(".", void AudioApi_SetSequenceFlags(s32 seqId, u8 flags));
+RECOMP_IMPORT(".", void AudioApi_RestoreSequenceFlags(s32 seqId));
 RECOMP_IMPORT(".", void AudioApi_ReplaceSoundEffect(s32 sfxId, SoundEffect* sfx));
 RECOMP_IMPORT(".", void AudioApi_ReplaceInstrument(s32 instId, Instrument* instrument));
 
