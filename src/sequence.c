@@ -1,6 +1,5 @@
 #include "global.h"
 #include "modding.h"
-#include "recompdata.h"
 #include "recomputils.h"
 #include "queue.h"
 #include "util.h"
@@ -31,6 +30,7 @@ RECOMP_CALLBACK(".", AudioApi_InitInternal) void AudioApi_SequenceInit() {
 
 RECOMP_CALLBACK(".", AudioApi_ReadyInternal) void AudioApi_SequenceReady() {
     AudioApi_QueueDrain(sequenceQueue, AudioApi_SequenceQueueDrain);
+    AudioApi_QueueDestroy(sequenceQueue);
 }
 
 RECOMP_EXPORT s32 AudioApi_AddSequence(AudioTableEntry* entry) {

@@ -1,114 +1,172 @@
 #include "global.h"
 #include "modding.h"
-#include "recompdata.h"
 #include "recomputils.h"
+#include "queue.h"
 
-RECOMP_DECLARE_EVENT(AudioApi_SoundFontLoaded(s32 fontId, u8* ramAddr));
+AudioApiQueue* soundFontInitQueue;
+AudioApiQueue* soundFontLoadQueue;
 
+void AudioApi_SoundFontQueueDrain(AudioApiCmd* cmd);
+Drum* AudioApi_CopyDrum(Drum* src);
 SoundEffect* AudioApi_CopySoundEffect(SoundEffect* src);
 Instrument* AudioApi_CopyInstrument(Instrument* src);
 Sample* AudioApi_CopySample(Sample* src);
-
+void AudioApi_FreeDrum(Drum* drum);
 void AudioApi_FreeSoundEffect(SoundEffect* sfx);
 void AudioApi_FreeInstrument(Instrument* instrument);
 void AudioApi_FreeSample(Sample* sample);
 
-typedef struct {
-    s32 id;
-    void* value;
-} SoundFontMapEntry;
+RECOMP_DECLARE_EVENT(AudioApi_SoundFontLoaded(s32 fontId, u8* ramAddr));
 
-U32MemoryHashmapHandle drumMap;
-U32MemoryHashmapHandle sfxMap;
-U32MemoryHashmapHandle instrumentMap;
-
-RECOMP_CALLBACK("*", recomp_on_init) void AudioApi_SoundFontInit() {
-    drumMap = recomputil_create_u32_memory_hashmap(sizeof(SoundFontMapEntry));
-    sfxMap = recomputil_create_u32_memory_hashmap(sizeof(SoundFontMapEntry));
-    instrumentMap = recomputil_create_u32_memory_hashmap(sizeof(SoundFontMapEntry));
+RECOMP_CALLBACK(".", AudioApi_InitInternal) void AudioApi_SoundFontInit() {
+    // Queue for the init phase so that mods can register data in the correct order
+    soundFontInitQueue = AudioApi_QueueCreate();
+    // Queue for when a soundfont is actually loaded in order to apply our changes
+    soundFontLoadQueue = AudioApi_QueueCreate();
 }
 
-RECOMP_EXPORT int AudioApi_ReplaceSoundEffect(s32 sfxId, SoundEffect* sfx) {
+RECOMP_CALLBACK(".", AudioApi_ReadyInternal) void AudioApi_SoundFontReady() {
+    AudioApi_QueueDrain(soundFontInitQueue, AudioApi_SoundFontQueueDrain);
+    AudioApi_QueueDestroy(soundFontInitQueue);
+}
+
+RECOMP_EXPORT void AudioApi_ReplaceDrum(s32 fontId, s32 drumId, Drum* drum) {
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_NOT_READY) {
+        return;
+    }
+    Drum* copy = AudioApi_CopyDrum(drum);
+    if (!copy) {
+        return;
+    }
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING) {
+        AudioApi_QueueCmd(soundFontInitQueue, AUDIOAPI_CMD_OP_REPLACE_DRUM, fontId, drumId, (void**)&copy);
+    } else {
+        AudioApi_QueueCmd(soundFontLoadQueue, AUDIOAPI_CMD_OP_REPLACE_DRUM, fontId, drumId, (void**)&copy);
+    }
+}
+
+RECOMP_EXPORT void AudioApi_ReplaceSoundEffect(s32 fontId, s32 sfxId, SoundEffect* sfx) {
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_NOT_READY) {
+        return;
+    }
     SoundEffect* copy = AudioApi_CopySoundEffect(sfx);
-    if (!copy) return 0;
-
-    SoundFontMapEntry entry = { sfxId, copy };
-
-    u32 count = recomputil_u32_memory_hashmap_size(sfxMap);
-    if (!recomputil_u32_memory_hashmap_create(sfxMap, count)) {
-        AudioApi_FreeSoundEffect(copy);
-        return 0;
+    if (!copy) {
+        return;
     }
-
-    SoundFontMapEntry* entryAddr = recomputil_u32_memory_hashmap_get(sfxMap, count);
-    if (!entryAddr) {
-        AudioApi_FreeSoundEffect(copy);
-        return 0;
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING) {
+        AudioApi_QueueCmd(soundFontInitQueue, AUDIOAPI_CMD_OP_REPLACE_SOUNDEFFECT, fontId, sfxId, (void**)&copy);
+    } else {
+        AudioApi_QueueCmd(soundFontLoadQueue, AUDIOAPI_CMD_OP_REPLACE_SOUNDEFFECT, fontId, sfxId, (void**)&copy);
     }
-
-    *entryAddr = entry;
-    return 1;
 }
 
-RECOMP_EXPORT int AudioApi_ReplaceInstrument(s32 instId, Instrument* instrument) {
+RECOMP_EXPORT void AudioApi_ReplaceInstrument(s32 fontId, s32 instId, Instrument* instrument) {
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_NOT_READY) {
+        return;
+    }
     Instrument* copy = AudioApi_CopyInstrument(instrument);
-    if (!copy) return 0;
-
-    SoundFontMapEntry entry = { instId, copy };
-
-    u32 count = recomputil_u32_memory_hashmap_size(instrumentMap);
-    if (!recomputil_u32_memory_hashmap_create(instrumentMap, count)) {
-        AudioApi_FreeInstrument(copy);
-        return 0;
+    if (!copy) {
+        return;
     }
-
-    SoundFontMapEntry* entryAddr = recomputil_u32_memory_hashmap_get(instrumentMap, count);
-    if (!entryAddr) {
-        AudioApi_FreeInstrument(copy);
-        return 0;
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING) {
+        AudioApi_QueueCmd(soundFontInitQueue, AUDIOAPI_CMD_OP_REPLACE_INSTRUMENT, fontId, instId, (void**)&copy);
+    } else {
+        AudioApi_QueueCmd(soundFontLoadQueue, AUDIOAPI_CMD_OP_REPLACE_INSTRUMENT, fontId, instId, (void**)&copy);
     }
-
-    *entryAddr = entry;
-    return 1;
 }
 
-void AudioApi_ApplySoundFont0Changes(u8* ramAddr) {
+void AudioApi_SoundFontQueueDrain(AudioApiCmd* cmd) {
+    switch (cmd->op) {
+    case AUDIOAPI_CMD_OP_REPLACE_DRUM:
+    case AUDIOAPI_CMD_OP_REPLACE_SOUNDEFFECT:
+    case AUDIOAPI_CMD_OP_REPLACE_INSTRUMENT:
+        // Move to load queue
+        AudioApi_QueueCmd(soundFontLoadQueue, cmd->op, cmd->arg0, cmd->arg1, &cmd->data);
+        break;
+    default:
+        break;
+    }
+}
+
+void AudioApi_ApplySoundFontChanges(s32 fontId, u8* ramAddr) {
     uintptr_t* fontData = (uintptr_t*)ramAddr;
-    u32 i;
+    AudioApiCmd* cmd;
+    Drum** drumOffsets;
+    Drum* drum;
+    SoundEffect* sfx;
+    Instrument* instrument;
+    s32 numDrums = gAudioCtx.soundFontList[fontId].numDrums;
+    s32 numInstruments = gAudioCtx.soundFontList[fontId].numInstruments;
+    s32 numSfx = gAudioCtx.soundFontList[fontId].numSfx;
 
     // The first u32 in fontData is an offset to a list of offsets to the drums
     // The second u32 in fontData is an offset to the first sound effect entry
     // Starting from the 3rd u32 in fontData is the list of offsets to the instruments
-
-    for (i = 0; i < recomputil_u32_memory_hashmap_size(sfxMap); i++) {
-        SoundFontMapEntry* entry = recomputil_u32_memory_hashmap_get(sfxMap, i);
-        if (!entry) continue;
-
-        SoundEffect* sfx = (SoundEffect*)(ramAddr + fontData[1]) + entry->id;
-        *sfx = *(SoundEffect*)entry->value;
-    }
-
-
-    for (i = 0; i < recomputil_u32_memory_hashmap_size(instrumentMap); i++) {
-        SoundFontMapEntry* entry = recomputil_u32_memory_hashmap_get(instrumentMap, i);
-        if (!entry) continue;
-
-        Instrument* instrument = (Instrument*)(ramAddr + fontData[2 + entry->id]);
-        *instrument = *(Instrument*)entry->value;
+    for (s32 i = 0; i < soundFontLoadQueue->numEntries; i++) {
+        cmd = &soundFontLoadQueue->entries[i];
+        if (cmd->arg0 != fontId) {
+            continue;
+        }
+        switch (cmd->op) {
+        case AUDIOAPI_CMD_OP_REPLACE_DRUM:
+            if (cmd->arg1 >= numDrums) break;
+            drumOffsets = (Drum**)(ramAddr + fontData[0]);
+            drumOffsets[cmd->arg1] = (void*)((uintptr_t)cmd->asPtr - (uintptr_t)ramAddr);
+            break;
+        case AUDIOAPI_CMD_OP_REPLACE_SOUNDEFFECT:
+            if (cmd->arg1 >= numSfx) break;
+            sfx = (SoundEffect*)(ramAddr + fontData[1]) + cmd->arg1;
+            *sfx = *(SoundEffect*)cmd->asPtr;
+            break;
+        case AUDIOAPI_CMD_OP_REPLACE_INSTRUMENT:
+            if (cmd->arg1 >= numInstruments) break;
+            instrument = (Instrument*)(ramAddr + fontData[2 + cmd->arg1]);
+            *instrument = *(Instrument*)cmd->asPtr;
+            break;
+        default:
+            break;
+        }
     }
 }
 
-RECOMP_CALLBACK(".", AudioApi_AfterSyncDma) void AudioApi_SoundFontAfterSyncDma(uintptr_t devAddr, u8* ramAddr) {
-    for (s32 fontId = 0; fontId < gAudioCtx.soundFontTable->header.numEntries; fontId++) {
-        AudioTableEntry* entry = &gAudioCtx.soundFontTable->entries[fontId];
-        if (entry->romAddr == devAddr) {
-            if (fontId == 0) {
-                AudioApi_ApplySoundFont0Changes(ramAddr);
-            }
-            AudioApi_SoundFontLoaded(fontId, ramAddr);
-            return;
+RECOMP_HOOK("AudioLoad_RelocateFont") void AudioApi_onRelocateFont(s32 fontId, void* ramAddr) {
+    AudioApi_ApplySoundFontChanges(fontId, ramAddr);
+    AudioApi_SoundFontLoaded(fontId, ramAddr);
+}
+
+Drum* AudioApi_CopyDrum(Drum* src) {
+    if (!src) return NULL;
+
+    Drum* copy = recomp_alloc(sizeof(Drum));
+    if (!copy) return NULL;
+
+    Lib_MemCpy(copy, src, sizeof(Drum));
+    copy->isRelocated = 1;
+
+    if (src->tunedSample.sample) {
+        copy->tunedSample.sample = AudioApi_CopySample(src->tunedSample.sample);
+        if (!copy->tunedSample.sample) {
+            AudioApi_FreeDrum(copy);
+            return NULL;
         }
     }
+
+    if (src->envelope) {
+        size_t envCount = 0;
+        while (src->envelope[envCount].delay != ADSR_HANG) {
+            envCount++;
+        }
+        envCount++;
+
+        copy->envelope = recomp_alloc(sizeof(EnvelopePoint) * envCount);
+        if (!copy->envelope) {
+            AudioApi_FreeDrum(copy);
+            return NULL;
+        }
+        Lib_MemCpy(copy->envelope, src->envelope, sizeof(EnvelopePoint) * envCount);
+    }
+
+    return copy;
 }
 
 SoundEffect* AudioApi_CopySoundEffect(SoundEffect* src) {
@@ -217,6 +275,13 @@ Sample* AudioApi_CopySample(Sample* src) {
     }
 
     return copy;
+}
+
+void AudioApi_FreeDrum(Drum* drum) {
+    if (!drum) return;
+    if (drum->tunedSample.sample) AudioApi_FreeSample(drum->tunedSample.sample);
+    if (drum->envelope) recomp_free(drum->envelope);
+    recomp_free(drum);
 }
 
 void AudioApi_FreeSoundEffect(SoundEffect* sfx) {

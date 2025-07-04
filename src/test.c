@@ -6,6 +6,7 @@
 
 INCBIN(sequence, "src/test/DetectiveSky612-DanceOfDeath.zseq");
 INCBIN(rickroll, "src/test/rickroll32kHzmono.raw");
+INCBIN(drum,    "src/test/drum.raw");
 INCBIN(attack1, "src/test/attack1.raw");
 INCBIN(attack2, "src/test/attack2.raw");
 INCBIN(attack3, "src/test/attack3.raw");
@@ -18,8 +19,9 @@ RECOMP_IMPORT(".", void AudioApi_ReplaceSequenceFont(s32 seqId, s32 fontNum, s32
 RECOMP_IMPORT(".", void AudioApi_RestoreSequenceFont(s32 seqId, s32 fontNum));
 RECOMP_IMPORT(".", void AudioApi_SetSequenceFlags(s32 seqId, u8 flags));
 RECOMP_IMPORT(".", void AudioApi_RestoreSequenceFlags(s32 seqId));
-RECOMP_IMPORT(".", void AudioApi_ReplaceSoundEffect(s32 sfxId, SoundEffect* sfx));
-RECOMP_IMPORT(".", void AudioApi_ReplaceInstrument(s32 instId, Instrument* instrument));
+RECOMP_IMPORT(".", void AudioApi_ReplaceDrum(s32 fontId, s32 drumId, Drum* drum));
+RECOMP_IMPORT(".", void AudioApi_ReplaceSoundEffect(s32 fontId, s32 sfxId, SoundEffect* sfx));
+RECOMP_IMPORT(".", void AudioApi_ReplaceInstrument(s32 fontId, s32 instId, Instrument* instrument));
 
 EnvelopePoint myEnv[] = {
     ENVELOPE_POINT(    1, 32700),
@@ -27,6 +29,14 @@ EnvelopePoint myEnv[] = {
     ENVELOPE_POINT(32700, 32700),
     ENVELOPE_HANG(),
 };
+
+EnvelopePoint drumEnv[] = {
+    ENVELOPE_POINT(    2, 32700),
+    ENVELOPE_POINT(  298,     0),
+    ENVELOPE_POINT(    1,     0),
+    ENVELOPE_HANG(),
+};
+
 
 s32 newSeqId;
 
@@ -83,7 +93,35 @@ RECOMP_CALLBACK(".", AudioApi_Init) void my_mod_on_init() {
             INSTR_SAMPLE_NONE,
         };
 
-        AudioApi_ReplaceInstrument(61, &myInstrument);
+        AudioApi_ReplaceInstrument(0x00, 61, &myInstrument);
+    }
+
+    {
+        // Replace Timpani
+
+        AdpcmLoop mySample_LOOP = {
+            { 0, (drum_end - drum) / 2, 0, 0 }, {}
+        };
+
+        Sample mySample = {
+            0, CODEC_S16, MEDIUM_CART, false, false,
+            drum_end - drum,
+            drum,
+            &mySample_LOOP,
+            NULL
+        };
+
+        Drum myDrum = {
+            251, 74, false,
+            { &mySample, 1.0f },
+            drumEnv,
+        };
+
+        for (s32 i = 33; i < 64; i++) {
+            // Scale tuning from 0.45f - 2.0f
+            myDrum.tunedSample.tuning = 0.05f + 0.05f * (i - 33);
+            AudioApi_ReplaceDrum(0x03, i, &myDrum);
+        }
     }
 
     {
@@ -103,13 +141,13 @@ RECOMP_CALLBACK(".", AudioApi_Init) void my_mod_on_init() {
             { &mySample, 2.0f },
         };
 
-        AudioApi_ReplaceSoundEffect(28, &mySfx);
+        AudioApi_ReplaceSoundEffect(0x00, 28, &mySfx);
 
         mySfx.tunedSample.tuning = 2.05f;
-        AudioApi_ReplaceSoundEffect(30, &mySfx);
+        AudioApi_ReplaceSoundEffect(0x00, 30, &mySfx);
 
         mySfx.tunedSample.tuning = 2.1f;
-        AudioApi_ReplaceSoundEffect(32, &mySfx);
+        AudioApi_ReplaceSoundEffect(0x00, 32, &mySfx);
     }
 
     {
@@ -129,10 +167,10 @@ RECOMP_CALLBACK(".", AudioApi_Init) void my_mod_on_init() {
             { &mySample, 2.0f },
         };
 
-        AudioApi_ReplaceSoundEffect(29, &mySfx);
+        AudioApi_ReplaceSoundEffect(0x00, 29, &mySfx);
 
         mySfx.tunedSample.tuning = 2.1f;
-        AudioApi_ReplaceSoundEffect(31, &mySfx);
+        AudioApi_ReplaceSoundEffect(0x00, 31, &mySfx);
     }
 
     {
@@ -152,7 +190,7 @@ RECOMP_CALLBACK(".", AudioApi_Init) void my_mod_on_init() {
             { &mySample, 2.0f },
         };
 
-        AudioApi_ReplaceSoundEffect(33, &mySfx);
+        AudioApi_ReplaceSoundEffect(0x00, 33, &mySfx);
     }
 }
 

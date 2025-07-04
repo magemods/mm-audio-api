@@ -48,7 +48,7 @@ void AudioApi_QueueDestroy(AudioApiQueue* queue) {
 }
 
 bool AudioApi_QueueCmd(AudioApiQueue* queue, u8 op, s32 arg0, s32 arg1, void** data) {
-    // Only one combination of op+arg0+arg1 is allowed in the queue
+    // Only one combination of op + arg0 + arg1 is allowed in the queue
     for (s32 i = 0; i < queue->numEntries; i++) {
         AudioApiCmd* cmd = &queue->entries[i];
         if (cmd->op == op && cmd->arg0 == arg0 && cmd->arg1 == arg1) {
