@@ -13,7 +13,8 @@ INCBIN(attack3, "src/test/attack3.raw");
 RECOMP_IMPORT(".", s16 AudioApi_AddSequence(AudioTableEntry* entry));
 RECOMP_IMPORT(".", void AudioApi_ReplaceSequence(AudioTableEntry* entry, s32 seqId));
 RECOMP_IMPORT(".", void AudioApi_RestoreSequence(s32 seqId));
-RECOMP_IMPORT(".", void AudioApi_SetSequenceFontId(s32 seqId, s32 fontNum, s32 fontId));
+RECOMP_IMPORT(".", void AudioApi_AddSequenceFont(s32 seqId, s32 fontId));
+RECOMP_IMPORT(".", void AudioApi_SetSequenceFont(s32 seqId, s32 fontId, s32 fontNum));
 RECOMP_IMPORT(".", void AudioApi_SetSequenceFlags(s32 seqId, u8 flags));
 RECOMP_IMPORT(".", void AudioApi_ReplaceSoundEffect(SoundEffect* sfx, s32 sfxId));
 RECOMP_IMPORT(".", void AudioApi_ReplaceInstrument(Instrument* instrument, s32 instId));
@@ -24,6 +25,14 @@ EnvelopePoint myEnv[] = {
     ENVELOPE_POINT(32700, 32700),
     ENVELOPE_HANG(),
 };
+
+s32 newSeqId;
+
+RECOMP_HOOK("Player_Update") void onPlayer_Update(Player* this, PlayState* play) {
+    if (CHECK_BTN_ALL(CONTROLLER1(&play->state)->press.button, BTN_L)) {
+        AudioSeq_StartSequence(SEQ_PLAYER_BGM_MAIN, newSeqId, 0, 0);
+    }
+}
 
 RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
 
@@ -39,11 +48,11 @@ RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
         };
 
         AudioApi_ReplaceSequence(&mySeq, NA_BGM_FILE_SELECT);
-        AudioApi_SetSequenceFontId(NA_BGM_FILE_SELECT, 0, 3);
+        AudioApi_SetSequenceFont(NA_BGM_FILE_SELECT, 3, 0);
 
         // Also add as a new sequence (seqId = 128)
-        s32 newSeqId = AudioApi_AddSequence(&mySeq);
-        AudioApi_SetSequenceFontId(newSeqId, 0, 3);
+        newSeqId = AudioApi_AddSequence(&mySeq);
+        AudioApi_AddSequenceFont(newSeqId, 3);
     }
 
     {

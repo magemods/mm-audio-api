@@ -98,11 +98,20 @@ void AudioApi_ApplySoundFont0Changes(u8* ramAddr) {
     }
 }
 
-void AudioApi_LoadSoundFont(u8* ramAddr, s32 fontId) {
-    if (fontId == 0) {
-        AudioApi_ApplySoundFont0Changes(ramAddr);
+RECOMP_CALLBACK(".", AudioApi_afterSyncDma) void AudioApi_DispatchSoundFontEvent(uintptr_t devAddr, u8* ramAddr) {
+    AudioTableEntry* entry;
+    s32 fontId;
+
+    for (fontId = 0; fontId < gAudioCtx.soundFontTable->header.numEntries; fontId++) {
+        entry = &gAudioCtx.soundFontTable->entries[fontId];
+        if (entry->romAddr == devAddr) {
+            if (fontId == 0) {
+                AudioApi_ApplySoundFont0Changes(ramAddr);
+            }
+            AudioApi_onLoadSoundFont(ramAddr, fontId);
+            return;
+        }
     }
-    AudioApi_onLoadSoundFont(ramAddr, fontId);
 }
 
 SoundEffect* AudioApi_CopySoundEffect(SoundEffect* src) {

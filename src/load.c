@@ -1,72 +1,15 @@
-#include "load.h"
+#include "global.h"
 #include "modding.h"
 #include "recomputils.h"
 
+RECOMP_DECLARE_EVENT(AudioApi_preInit());
 RECOMP_DECLARE_EVENT(AudioApi_onInit());
+RECOMP_DECLARE_EVENT(AudioApi_afterSyncDma(uintptr_t devAddr, u8* ramAddr));
 
 extern DmaHandler sDmaHandler;
 extern u8 gAudioHeap[0x138000];
+extern void AudioLoad_InitTable(AudioTable* table, uintptr_t romAddr, u16 unkMediumParam);
 extern void AudioLoad_InitSoundFont(s32 fontId);
-
-/* -------------------------------------------------------------------------- */
-
-AudioTable* AudioApi_CopyTable(AudioTable* table) {
-    size_t count = table->header.numEntries;
-    size_t size = sizeof(AudioTableHeader) + count * sizeof(AudioTableEntry);
-
-    AudioTable* newTable = recomp_alloc(size);
-    if (!newTable) return table;
-
-    Lib_MemCpy(newTable, table, size);
-    return newTable;
-}
-
-s32 AudioApi_AddTableEntry(AudioTable** tablePtr, AudioTableEntry* entry) {
-    AudioTable* table = *tablePtr;
-    size_t count = table->header.numEntries + 1;
-    size_t size = sizeof(AudioTableHeader) + count * sizeof(AudioTableEntry);
-
-    AudioTable* newTable = recomp_alloc(size);
-    if (!newTable) return 0;
-
-    Lib_MemCpy(newTable, table, size - sizeof(AudioTableEntry));
-    recomp_free(table);
-
-    newTable->entries[count - 1] = *entry;
-    newTable->header.numEntries = count;
-
-    *tablePtr = newTable;
-    return count - 1;
-}
-
-void AudioApi_ReplaceTableEntry(AudioTable* table, AudioTableEntry* entry, s32 id) {
-    if (id < table->header.numEntries) {
-        table->entries[id] = *entry;
-    }
-}
-
-void AudioApi_RestoreTableEntry(AudioTable* table, s32 id) {
-    AudioTable* origTable = (AudioTable*)gSequenceTable;
-    if (id < origTable->header.numEntries) {
-        table->entries[id] = origTable->entries[id];
-    }
-}
-
-RECOMP_PATCH void AudioLoad_InitTable(AudioTable* table, uintptr_t romAddr, u16 unkMediumParam) {
-    s32 i;
-
-    table->header.unkMediumParam = unkMediumParam;
-    table->header.romAddr = romAddr;
-
-    for (i = 0; i < table->header.numEntries; i++) {
-        if ((table->entries[i].size != 0) && (table->entries[i].medium == MEDIUM_CART)) {
-            // @mod don't relocate mod addrs
-            if (!IS_KSEG0(table->entries[i].romAddr)) {
-                table->entries[i].romAddr += romAddr;
-            }
-        }
-    }
-}
 
 /* -------------------------------------------------------------------------- */
 
@@ -167,12 +110,15 @@ RECOMP_PATCH void AudioLoad_Init(void* heap, size_t heapSize) {
     gAudioCtx.sampleBankTable = &gSampleBankTable;
     gAudioCtx.sequenceFontTable = gSequenceFontTable;
 
-    // @mod Make copies of tables so we can resize later
-    gAudioCtx.sequenceTable = AudioApi_CopyTable(gAudioCtx.sequenceTable);
-    gAudioCtx.soundFontTable = AudioApi_CopyTable(gAudioCtx.soundFontTable);
-    gAudioCtx.sampleBankTable = AudioApi_CopyTable(gAudioCtx.sampleBankTable);
+    // Initialize audio tables
+    AudioLoad_InitTable(gAudioCtx.sequenceTable, SEGMENT_ROM_START(Audioseq), 0);
+    AudioLoad_InitTable(gAudioCtx.soundFontTable, SEGMENT_ROM_START(Audiobank), 0);
+    AudioLoad_InitTable(gAudioCtx.sampleBankTable, SEGMENT_ROM_START(Audiotable), 0);
 
-    // @mod Call event for mods to register data
+    // @mod Call internal event to set up tables
+    AudioApi_preInit();
+
+    // @mod Call events for mods to register data
     AudioApi_onInit();
 
     gAudioCtx.numSequences = gAudioCtx.sequenceTable->header.numEntries;
@@ -180,11 +126,6 @@ RECOMP_PATCH void AudioLoad_Init(void* heap, size_t heapSize) {
     gAudioCtx.specId = 0;
     gAudioCtx.resetStatus = 1; // Set reset to immediately initialize the audio heap
     AudioHeap_ResetStep();
-
-    // Initialize audio tables
-    AudioLoad_InitTable(gAudioCtx.sequenceTable, SEGMENT_ROM_START(Audioseq), 0);
-    AudioLoad_InitTable(gAudioCtx.soundFontTable, SEGMENT_ROM_START(Audiobank), 0);
-    AudioLoad_InitTable(gAudioCtx.sampleBankTable, SEGMENT_ROM_START(Audiotable), 0);
 
     numFonts = gAudioCtx.soundFontTable->header.numEntries;
     gAudioCtx.soundFontList = AudioHeap_Alloc(&gAudioCtx.initPool, numFonts * sizeof(SoundFont));
@@ -258,6 +199,8 @@ RECOMP_PATCH s32 AudioLoad_Dma(OSIoMesg* mesg, u32 priority, s32 direction, uint
         return AudioApi_Dma_Rom(mesg, priority, direction, devAddr, ramAddr, size, reqQueue, medium, dmaFuncType);
     }
 }
+
+/* -------------------------------------------------------------------------- */
 
 RECOMP_PATCH void* AudioLoad_DmaSampleData(uintptr_t devAddr, size_t size, s32 arg2, u8* dmaIndexRef, s32 medium) {
     s32 pad1;
@@ -357,9 +300,6 @@ RECOMP_PATCH void* AudioLoad_DmaSampleData(uintptr_t devAddr, size_t size, s32 a
 
 /* -------------------------------------------------------------------------- */
 
-void AudioApi_LoadSoundFont(u8* ramAddr, s32 fontId);
-void AudioApi_LoadSequence(u8* ramAddr, s32 seqId);
-
 static uintptr_t sDevAddr = 0;
 static u8* sRamAddr = NULL;
 
@@ -369,22 +309,5 @@ RECOMP_HOOK("AudioLoad_SyncDma") void AudioLoad_onSyncDma(uintptr_t devAddr, u8*
 }
 
 RECOMP_HOOK_RETURN("AudioLoad_SyncDma") void AudioLoad_afterSyncDma() {
-    AudioTableEntry* entry;
-    s32 id;
-
-    for (id = 0; id < gAudioCtx.soundFontTable->header.numEntries; id++) {
-        entry = &gAudioCtx.soundFontTable->entries[id];
-        if (entry->romAddr == sDevAddr) {
-            AudioApi_LoadSoundFont(sRamAddr, id);
-            return;
-        }
-    }
-
-    for (id = 0; id < gAudioCtx.sequenceTable->header.numEntries; id++) {
-        entry = &gAudioCtx.sequenceTable->entries[id];
-        if (entry->romAddr == sDevAddr) {
-            AudioApi_LoadSequence(sRamAddr, id);
-            return;
-        }
-    }
+    AudioApi_afterSyncDma(sDevAddr, sRamAddr);
 }
