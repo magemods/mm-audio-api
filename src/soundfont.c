@@ -28,7 +28,7 @@ RECOMP_CALLBACK("*", recomp_on_init) void AudioApi_SoundFontInit() {
     instrumentMap = recomputil_create_u32_memory_hashmap(sizeof(SoundFontMapEntry));
 }
 
-RECOMP_EXPORT int AudioApi_ReplaceSoundEffect(SoundEffect* sfx, s32 sfxId) {
+RECOMP_EXPORT int AudioApi_ReplaceSoundEffect(s32 sfxId, SoundEffect* sfx) {
     SoundEffect* copy = AudioApi_CopySoundEffect(sfx);
     if (!copy) return 0;
 
@@ -50,7 +50,7 @@ RECOMP_EXPORT int AudioApi_ReplaceSoundEffect(SoundEffect* sfx, s32 sfxId) {
     return 1;
 }
 
-RECOMP_EXPORT int AudioApi_ReplaceInstrument(Instrument* instrument, s32 instId) {
+RECOMP_EXPORT int AudioApi_ReplaceInstrument(s32 instId, Instrument* instrument) {
     Instrument* copy = AudioApi_CopyInstrument(instrument);
     if (!copy) return 0;
 

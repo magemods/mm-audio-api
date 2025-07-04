@@ -11,13 +11,13 @@ INCBIN(attack2, "src/test/attack2.raw");
 INCBIN(attack3, "src/test/attack3.raw");
 
 RECOMP_IMPORT(".", s16 AudioApi_AddSequence(AudioTableEntry* entry));
-RECOMP_IMPORT(".", void AudioApi_ReplaceSequence(AudioTableEntry* entry, s32 seqId));
+RECOMP_IMPORT(".", void AudioApi_ReplaceSequence(s32 seqId, AudioTableEntry* entry));
 RECOMP_IMPORT(".", void AudioApi_RestoreSequence(s32 seqId));
 RECOMP_IMPORT(".", void AudioApi_AddSequenceFont(s32 seqId, s32 fontId));
-RECOMP_IMPORT(".", void AudioApi_SetSequenceFont(s32 seqId, s32 fontId, s32 fontNum));
+RECOMP_IMPORT(".", void AudioApi_ReplaceSequenceFont(s32 seqId, s32 fontNum, s32 fontId));
 RECOMP_IMPORT(".", void AudioApi_SetSequenceFlags(s32 seqId, u8 flags));
-RECOMP_IMPORT(".", void AudioApi_ReplaceSoundEffect(SoundEffect* sfx, s32 sfxId));
-RECOMP_IMPORT(".", void AudioApi_ReplaceInstrument(Instrument* instrument, s32 instId));
+RECOMP_IMPORT(".", void AudioApi_ReplaceSoundEffect(s32 sfxId, SoundEffect* sfx));
+RECOMP_IMPORT(".", void AudioApi_ReplaceInstrument(s32 instId, Instrument* instrument));
 
 EnvelopePoint myEnv[] = {
     ENVELOPE_POINT(    1, 32700),
@@ -47,12 +47,12 @@ RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
             0, 0, 0,                 // shortData
         };
 
-        AudioApi_ReplaceSequence(&mySeq, NA_BGM_FILE_SELECT);
-        AudioApi_SetSequenceFont(NA_BGM_FILE_SELECT, 3, 0);
+        AudioApi_ReplaceSequence(NA_BGM_FILE_SELECT, &mySeq);
+        AudioApi_ReplaceSequenceFont(NA_BGM_FILE_SELECT, 0, 0x03);
 
         // Also add as a new sequence (seqId = 128)
         newSeqId = AudioApi_AddSequence(&mySeq);
-        AudioApi_AddSequenceFont(newSeqId, 3);
+        AudioApi_AddSequenceFont(newSeqId, 0x03);
     }
 
     {
@@ -81,7 +81,7 @@ RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
             INSTR_SAMPLE_NONE,
         };
 
-        AudioApi_ReplaceInstrument(&myInstrument, 61);
+        AudioApi_ReplaceInstrument(61, &myInstrument);
     }
 
     {
@@ -101,13 +101,13 @@ RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
             { &mySample, 2.0f },
         };
 
-        AudioApi_ReplaceSoundEffect(&mySfx, 28);
+        AudioApi_ReplaceSoundEffect(28, &mySfx);
 
         mySfx.tunedSample.tuning = 2.05f;
-        AudioApi_ReplaceSoundEffect(&mySfx, 30);
+        AudioApi_ReplaceSoundEffect(30, &mySfx);
 
         mySfx.tunedSample.tuning = 2.1f;
-        AudioApi_ReplaceSoundEffect(&mySfx, 32);
+        AudioApi_ReplaceSoundEffect(32, &mySfx);
     }
 
     {
@@ -127,10 +127,10 @@ RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
             { &mySample, 2.0f },
         };
 
-        AudioApi_ReplaceSoundEffect(&mySfx, 29);
+        AudioApi_ReplaceSoundEffect(29, &mySfx);
 
         mySfx.tunedSample.tuning = 2.1f;
-        AudioApi_ReplaceSoundEffect(&mySfx, 31);
+        AudioApi_ReplaceSoundEffect(31, &mySfx);
     }
 
     {
@@ -150,7 +150,7 @@ RECOMP_CALLBACK(".", AudioApi_onInit) void my_mod_on_init() {
             { &mySample, 2.0f },
         };
 
-        AudioApi_ReplaceSoundEffect(&mySfx, 33);
+        AudioApi_ReplaceSoundEffect(33, &mySfx);
     }
 }
 

@@ -35,7 +35,7 @@ RECOMP_EXPORT s32 AudioApi_AddSequence(AudioTableEntry* entry) {
     return seqId;
 }
 
-RECOMP_EXPORT void AudioApi_ReplaceSequence(AudioTableEntry* entry, s32 seqId) {
+RECOMP_EXPORT void AudioApi_ReplaceSequence(s32 seqId, AudioTableEntry* entry) {
     if (seqId >= gAudioCtx.sequenceTable->header.numEntries) {
         return;
     }
@@ -65,7 +65,7 @@ RECOMP_EXPORT void AudioApi_AddSequenceFont(s32 seqId, s32 fontId) {
     entry[numFonts] = fontId;
 }
 
-RECOMP_EXPORT void AudioApi_SetSequenceFont(s32 seqId, s32 fontId, s32 fontNum) {
+RECOMP_EXPORT void AudioApi_ReplaceSequenceFont(s32 seqId, s32 fontNum, s32 fontId) {
     if (seqId >= gAudioCtx.sequenceTable->header.numEntries || fontNum >= MAX_FONTS_PER_SEQUENCE) {
         return;
     }
