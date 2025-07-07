@@ -55,7 +55,7 @@ RECOMP_HOOK("AudioThread_ProcessGlobalCmd") void AudioApi_ProcessGlobalCmd(Audio
     }
 }
 
-RECOMP_EXPORT void RecompQueue_ExtendedSeqCmd(u32 op, u32 cmd, u32 arg1, s32 seqId) {
+RECOMP_EXPORT void AudioApi_QueueExtendedSeqCmd(u32 op, u32 cmd, u32 arg1, s32 seqId) {
     cmd |= (op & 0xF) << 28;
     RecompQueue_Push(sAudioSeqCmdQueue, op, cmd, arg1, (void**)&seqId);
 }
