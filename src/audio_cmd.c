@@ -19,10 +19,10 @@
 extern void AudioSeq_ProcessSeqCmd(u32 cmd);
 extern void AudioThread_SetFadeInTimer(s32 seqPlayerIndex, s32 fadeTimer);
 
-AudioApiQueue* sAudioSeqCmdQueue;
+RecompQueue* sAudioSeqCmdQueue;
 
-RECOMP_CALLBACK("*", recomp_on_init) void AudioApi_AudioCmdInit() {
-    sAudioSeqCmdQueue = AudioApi_QueueCreate();
+RECOMP_CALLBACK(".", AudioApi_InitInternal) void AudioApi_AudioCmdInit() {
+    sAudioSeqCmdQueue = RecompQueue_Create();
 }
 
 /**
@@ -55,24 +55,24 @@ RECOMP_HOOK("AudioThread_ProcessGlobalCmd") void AudioApi_ProcessGlobalCmd(Audio
     }
 }
 
-RECOMP_EXPORT void AudioApi_QueueExtendedSeqCmd(u32 op, u32 cmd, u32 arg1, s32 seqId) {
+RECOMP_EXPORT void RecompQueue_ExtendedSeqCmd(u32 op, u32 cmd, u32 arg1, s32 seqId) {
     cmd |= (op & 0xF) << 28;
-    AudioApi_QueueCmd(sAudioSeqCmdQueue, op, cmd, arg1, (void**)&seqId);
+    RecompQueue_Push(sAudioSeqCmdQueue, op, cmd, arg1, (void**)&seqId);
 }
 
 RECOMP_PATCH void AudioSeq_QueueSeqCmd(u32 cmd) {
     u8 op = cmd >> 28;
-    AudioApi_QueueCmd(sAudioSeqCmdQueue, op, cmd, 0, 0);
+    RecompQueue_Push(sAudioSeqCmdQueue, op, cmd, 0, 0);
 }
 
 RECOMP_PATCH void AudioSeq_ProcessSeqCmds(void) {
-    AudioApi_QueueDrain(sAudioSeqCmdQueue, AudioApi_ProcessSeqCmd);
+    RecompQueue_Drain(sAudioSeqCmdQueue, AudioApi_ProcessSeqCmd);
 }
 
 /**
  * Process our extended sequence commands and their non-extended counterparts
  */
-void AudioApi_ProcessSeqCmd(AudioApiCmd* cmd) {
+void AudioApi_ProcessSeqCmd(RecompQueueCmd* cmd) {
     s32 priority;
     u16 fadeTimer;
     u8 subOp;
@@ -218,10 +218,10 @@ void AudioApi_ProcessSeqCmd(AudioApiCmd* cmd) {
             if (found < ARRAY_COUNT(gExtActiveSeqs[seqPlayerIndex].setupCmd)) {
                 if (subOp == SEQCMD_SUB_OP_SETUP_PLAY_SEQ) {
                     gExtActiveSeqs[seqPlayerIndex].setupCmd[found] =
-                        (AudioApiCmd){ subOp, cmd->arg0, seqPlayerIndex, (void**)&seqId };
+                        (RecompQueueCmd){ subOp, cmd->arg0, seqPlayerIndex, (void**)&seqId };
                 } else {
                     gExtActiveSeqs[seqPlayerIndex].setupCmd[found] =
-                        (AudioApiCmd){ subOp, cmd->arg0, seqPlayerIndex, 0 };
+                        (RecompQueueCmd){ subOp, cmd->arg0, seqPlayerIndex, 0 };
                 }
                 // Adds a delay of 2 frames before executing any setup commands.
                 // This allows setup commands to be requested along with a new sequence on a seqPlayerIndex.
@@ -249,7 +249,7 @@ void AudioApi_ProcessSeqCmd(AudioApiCmd* cmd) {
 /**
  * Process sequence sub-commands
  */
-void AudioApi_ProcessSeqSetupCmd(AudioApiCmd* setupCmd) {
+void AudioApi_ProcessSeqSetupCmd(RecompQueueCmd* setupCmd) {
     u8 seqPlayerIndex;
     u8 targetSeqPlayerIndex;
     u8 setupVal2;
@@ -314,7 +314,7 @@ void AudioApi_ProcessSeqSetupCmd(AudioApiCmd* setupCmd) {
     case SEQCMD_SUB_OP_SETUP_PLAY_SEQ:
         // Play the requested sequence
         // Uses the fade timer set by `SEQCMD_SUB_OP_SETUP_SET_FADE_TIMER`
-        // @mod Use extended cmd, read seqId from AudioApiCmd
+        // @mod Use extended cmd, read seqId from RecompQueueCmd
         seqId = setupCmd->asInt;
         SEQCMD_EXTENDED_PLAY_SEQUENCE((u8)(targetSeqPlayerIndex + (SEQCMD_ASYNC_ACTIVE >> 24)),
                                       gActiveSeqs[targetSeqPlayerIndex].setupFadeTimer,
@@ -369,7 +369,7 @@ void AudioApi_ProcessSeqSetupCmd(AudioApiCmd* setupCmd) {
 
 RECOMP_PATCH s32 AudioSeq_IsSeqCmdNotQueued(u32 cmdVal, u32 cmdMask) {
     for (s32 i = 0; i < sAudioSeqCmdQueue->numEntries; i++) {
-        AudioApiCmd* cmd = &sAudioSeqCmdQueue->entries[i];
+        RecompQueueCmd* cmd = &sAudioSeqCmdQueue->entries[i];
         if ((cmd->arg0 & cmdMask) == cmdVal) {
             return false;
         }

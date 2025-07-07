@@ -12,8 +12,8 @@ typedef struct {
 } SeqRequestExtended;
 
 typedef struct {
-    AudioApiCmd setupCmd[8]; // setup commands
-    AudioApiCmd startAsyncSeqCmd; // temporarily stores the seqCmd used in SEQCMD_PLAY_SEQUENCE, to be called again once the font is reloaded in
+    RecompQueueCmd setupCmd[8]; // setup commands
+    RecompQueueCmd startAsyncSeqCmd; // temporarily stores the seqCmd used in SEQCMD_PLAY_SEQUENCE, to be called again once the font is reloaded in
     s32 seqId;
     u16 seqArgs;
     s32 prevSeqId; // last seqId played on a player

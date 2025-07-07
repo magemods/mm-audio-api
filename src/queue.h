@@ -1,5 +1,5 @@
-#ifndef __AUDIO_API_QUEUE__
-#define __AUDIO_API_QUEUE__
+#ifndef __RECOMP_QUEUE__
+#define __RECOMP_QUEUE__
 
 #include "global.h"
 
@@ -17,20 +17,20 @@ typedef struct {
         u32 asUInt;
         void* asPtr;
     };
-} AudioApiCmd;
+} RecompQueueCmd;
 
 typedef struct {
-    AudioApiCmd* entries;
+    RecompQueueCmd* entries;
     u16 numEntries;
     u16 capacity;
-} AudioApiQueue;
+} RecompQueue;
 
-AudioApiQueue* AudioApi_QueueCreate();
-void AudioApi_QueueDestroy(AudioApiQueue* queue);
-bool AudioApi_QueueCmd(AudioApiQueue* queue, u32 op, u32 arg0, u32 arg1, void** data);
-bool AudioApi_QueueCmdIfNotQueued(AudioApiQueue* queue, u32 op, u32 arg0, u32 arg1, void** data);
-bool AudioApi_QueueIsCmdNotQueued(AudioApiQueue* queue, u32 op, u32 arg0, u32 arg1);
-void AudioApi_QueueDrain(AudioApiQueue* queue, void (*drainFunc)(AudioApiCmd* cmd));
-void AudioApi_QueueEmpty(AudioApiQueue* queue);
+RecompQueue* RecompQueue_Create();
+void RecompQueue_Destroy(RecompQueue* queue);
+bool RecompQueue_Push(RecompQueue* queue, u32 op, u32 arg0, u32 arg1, void** data);
+bool RecompQueue_PushIfNotQueued(RecompQueue* queue, u32 op, u32 arg0, u32 arg1, void** data);
+bool RecompQueue_IsCmdNotQueued(RecompQueue* queue, u32 op, u32 arg0, u32 arg1);
+void RecompQueue_Drain(RecompQueue* queue, void (*drainFunc)(RecompQueueCmd* cmd));
+void RecompQueue_Empty(RecompQueue* queue);
 
 #endif

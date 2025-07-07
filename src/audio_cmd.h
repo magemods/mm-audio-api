@@ -7,9 +7,9 @@
 #include "sequence_functions.h"
 #include "queue.h"
 
-void AudioApi_ProcessSeqCmd(AudioApiCmd* cmd);
-void AudioApi_ProcessSeqSetupCmd(AudioApiCmd* setupCmd);
-void AudioApi_QueueExtendedSeqCmd(u32 op, u32 cmd, u32 arg1, s32 seqId);
+void AudioApi_ProcessSeqCmd(RecompQueueCmd* cmd);
+void AudioApi_ProcessSeqSetupCmd(RecompQueueCmd* setupCmd);
+void RecompQueue_ExtendedSeqCmd(u32 op, u32 cmd, u32 arg1, s32 seqId);
 
 
 /**
@@ -35,10 +35,10 @@ typedef enum {
     AudioThread_QueueCmdS32(CMD_BBH(AUDIOCMD_EXTENDED_OP_GLOBAL_INIT_SEQPLAYER_SKIP_TICKS, \
                                     (u8)seqPlayerIndex, (u16)skipTicks), seqId)
 
-#define AUDIOCMD_EXTENDED_GLOBAL_DISCARD_SEQ_FONTS(seqId) \
+#define AUDIOCMD_EXTENDED_GLOBAL_DISCARD_SEQ_FONTS(seqId)               \
     AudioThread_QueueCmdS32(CMD_BBH(AUDIOCMD_EXTENDED_OP_GLOBAL_DISCARD_SEQ_FONTS, 0, 0), seqId)
 
-#define AUDIOCMD_EXTENDED_GLOBAL_ASYNC_LOAD_SEQ(seqId, retData) \
+#define AUDIOCMD_EXTENDED_GLOBAL_ASYNC_LOAD_SEQ(seqId, retData)         \
     AudioThread_QueueCmdS32(CMD_BBH(AUDIOCMD_EXTENDED_OP_GLOBAL_ASYNC_LOAD_SEQ, 0, retData), seqId)
 
 
@@ -64,10 +64,10 @@ typedef enum {
  */
 // TODO, should OR seqArgs with known flags and NOT last seqId with known flags
 #define SEQCMD_EXTENDED_PLAY_SEQUENCE(seqPlayerIndex, fadeInDuration, seqArgs, seqId) \
-    AudioApi_QueueExtendedSeqCmd(SEQCMD_EXTENDED_OP_PLAY_SEQUENCE,      \
-                                 CMD_BBH((u8)seqPlayerIndex, (u8)fadeInDuration, \
-                                         (u16)seqArgs | MIN(seqId, NA_BGM_UNKNOWN)), \
-                                 0, seqId)
+    RecompQueue_ExtendedSeqCmd(SEQCMD_EXTENDED_OP_PLAY_SEQUENCE,        \
+                               CMD_BBH((u8)seqPlayerIndex, (u8)fadeInDuration, \
+                                       (u16)seqArgs | MIN(seqId, NA_BGM_UNKNOWN)), \
+                               0, seqId)
 
 /**
  * Add a sequence to a queue of sequences associated with a given seqPlayer.
@@ -76,10 +76,10 @@ typedef enum {
  * @see SEQCMD_QUEUE_SEQUENCE
  */
 #define SEQCMD_EXTENDED_QUEUE_SEQUENCE(seqPlayerIndex, fadeInDuration, priority, seqId) \
-    AudioApi_QueueExtendedSeqCmd(SEQCMD_EXTENDED_OP_QUEUE_SEQUENCE,     \
-                                 CMD_BBBB((u8)seqPlayerIndex, (u8)fadeInDuration, \
-                                          (u8)priority, MIN(seqId, NA_BGM_UNKNOWN)), \
-                                 0, seqId)
+    RecompQueue_ExtendedSeqCmd(SEQCMD_EXTENDED_OP_QUEUE_SEQUENCE,       \
+                               CMD_BBBB((u8)seqPlayerIndex, (u8)fadeInDuration, \
+                                        (u8)priority, MIN(seqId, NA_BGM_UNKNOWN)), \
+                               0, seqId)
 
 /**
  * Remove a sequence from a queue of sequences associated with a given seqPlayer.
@@ -88,10 +88,10 @@ typedef enum {
  * @see SEQCMD_UNQUEUE_SEQUENCE
  */
 #define SEQCMD_EXTENDED_UNQUEUE_SEQUENCE(seqPlayerIndex, fadeOutInDuration, seqId) \
-    AudioApi_QueueExtendedSeqCmd(SEQCMD_EXTENDED_OP_UNQUEUE_SEQUENCE,   \
-                                 CMD_BBBB((u8)seqPlayerIndex, (u8)fadeOutInDuration, \
-                                          0, MIN(seqId, NA_BGM_UNKNOWN)), \
-                                 0, seqId)
+    RecompQueue_ExtendedSeqCmd(SEQCMD_EXTENDED_OP_UNQUEUE_SEQUENCE,     \
+                               CMD_BBBB((u8)seqPlayerIndex, (u8)fadeOutInDuration, \
+                                        0, MIN(seqId, NA_BGM_UNKNOWN)), \
+                               0, seqId)
 
 /**
  * Setup a request to play a sequence on a target seqPlayer once a setup seqPlayer is finished playing and disabled.
@@ -100,10 +100,10 @@ typedef enum {
  * @see SEQCMD_SETUP_PLAY_SEQUENCE
  */
 #define SEQCMD_EXTENDED_SETUP_PLAY_SEQUENCE(setupSeqPlayerIndex, targetSeqPlayerIndex, seqArgs, seqId) \
-    AudioApi_QueueExtendedSeqCmd(SEQCMD_EXTENDED_OP_SETUP_CMD,          \
-                                 CMD_BBH((u8)setupSeqPlayerIndex, (u8)targetSeqPlayerIndex, \
-                                         (u16)seqArgs | MIN(seqId, NA_BGM_UNKNOWN)), \
-                                 SEQCMD_SUB_OP_SETUP_PLAY_SEQ, seqId)
+    RecompQueue_ExtendedSeqCmd(SEQCMD_EXTENDED_OP_SETUP_CMD,            \
+                               CMD_BBH((u8)setupSeqPlayerIndex, (u8)targetSeqPlayerIndex, \
+                                       (u16)seqArgs | MIN(seqId, NA_BGM_UNKNOWN)), \
+                               SEQCMD_SUB_OP_SETUP_PLAY_SEQ, seqId)
 
 
 #endif

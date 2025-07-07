@@ -22,10 +22,10 @@ typedef enum {
     AUDIOAPI_CMD_OP_REPLACE_INSTRUMENT,
 } AudioApiSoundFontQueueOp;
 
-AudioApiQueue* soundFontInitQueue;
-AudioApiQueue* soundFontLoadQueue;
+RecompQueue* soundFontInitQueue;
+RecompQueue* soundFontLoadQueue;
 
-void AudioApi_SoundFontQueueDrain(AudioApiCmd* cmd);
+void AudioApi_SoundFontQueueDrain(RecompQueueCmd* cmd);
 Drum* AudioApi_CopyDrum(Drum* src);
 SoundEffect* AudioApi_CopySoundEffect(SoundEffect* src);
 Instrument* AudioApi_CopyInstrument(Instrument* src);
@@ -39,14 +39,14 @@ RECOMP_DECLARE_EVENT(AudioApi_SoundFontLoaded(s32 fontId, u8* ramAddr));
 
 RECOMP_CALLBACK(".", AudioApi_InitInternal) void AudioApi_SoundFontInit() {
     // Queue for the init phase so that mods can register data in the correct order
-    soundFontInitQueue = AudioApi_QueueCreate();
+    soundFontInitQueue = RecompQueue_Create();
     // Queue for when a soundfont is actually loaded in order to apply our changes
-    soundFontLoadQueue = AudioApi_QueueCreate();
+    soundFontLoadQueue = RecompQueue_Create();
 }
 
 RECOMP_CALLBACK(".", AudioApi_ReadyInternal) void AudioApi_SoundFontReady() {
-    AudioApi_QueueDrain(soundFontInitQueue, AudioApi_SoundFontQueueDrain);
-    AudioApi_QueueDestroy(soundFontInitQueue);
+    RecompQueue_Drain(soundFontInitQueue, AudioApi_SoundFontQueueDrain);
+    RecompQueue_Destroy(soundFontInitQueue);
 }
 
 RECOMP_EXPORT void AudioApi_ReplaceDrum(s32 fontId, s32 drumId, Drum* drum) {
@@ -57,8 +57,8 @@ RECOMP_EXPORT void AudioApi_ReplaceDrum(s32 fontId, s32 drumId, Drum* drum) {
     if (!copy) {
         return;
     }
-    AudioApiQueue* queue = gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING ? soundFontInitQueue : soundFontLoadQueue;
-    AudioApi_QueueCmdIfNotQueued(queue, AUDIOAPI_CMD_OP_REPLACE_DRUM, fontId, drumId, (void**)&copy);
+    RecompQueue* queue = gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING ? soundFontInitQueue : soundFontLoadQueue;
+    RecompQueue_PushIfNotQueued(queue, AUDIOAPI_CMD_OP_REPLACE_DRUM, fontId, drumId, (void**)&copy);
 }
 
 RECOMP_EXPORT void AudioApi_ReplaceSoundEffect(s32 fontId, s32 sfxId, SoundEffect* sfx) {
@@ -69,8 +69,8 @@ RECOMP_EXPORT void AudioApi_ReplaceSoundEffect(s32 fontId, s32 sfxId, SoundEffec
     if (!copy) {
         return;
     }
-    AudioApiQueue* queue = gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING ? soundFontInitQueue : soundFontLoadQueue;
-    AudioApi_QueueCmdIfNotQueued(queue, AUDIOAPI_CMD_OP_REPLACE_SOUNDEFFECT, fontId, sfxId, (void**)&copy);
+    RecompQueue* queue = gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING ? soundFontInitQueue : soundFontLoadQueue;
+    RecompQueue_PushIfNotQueued(queue, AUDIOAPI_CMD_OP_REPLACE_SOUNDEFFECT, fontId, sfxId, (void**)&copy);
 }
 
 RECOMP_EXPORT void AudioApi_ReplaceInstrument(s32 fontId, s32 instId, Instrument* instrument) {
@@ -81,17 +81,17 @@ RECOMP_EXPORT void AudioApi_ReplaceInstrument(s32 fontId, s32 instId, Instrument
     if (!copy) {
         return;
     }
-    AudioApiQueue* queue = gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING ? soundFontInitQueue : soundFontLoadQueue;
-    AudioApi_QueueCmdIfNotQueued(queue, AUDIOAPI_CMD_OP_REPLACE_INSTRUMENT, fontId, instId, (void**)&copy);
+    RecompQueue* queue = gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING ? soundFontInitQueue : soundFontLoadQueue;
+    RecompQueue_PushIfNotQueued(queue, AUDIOAPI_CMD_OP_REPLACE_INSTRUMENT, fontId, instId, (void**)&copy);
 }
 
-void AudioApi_SoundFontQueueDrain(AudioApiCmd* cmd) {
+void AudioApi_SoundFontQueueDrain(RecompQueueCmd* cmd) {
     switch (cmd->op) {
     case AUDIOAPI_CMD_OP_REPLACE_DRUM:
     case AUDIOAPI_CMD_OP_REPLACE_SOUNDEFFECT:
     case AUDIOAPI_CMD_OP_REPLACE_INSTRUMENT:
         // Move to load queue
-        AudioApi_QueueCmdIfNotQueued(soundFontLoadQueue, cmd->op, cmd->arg0, cmd->arg1, &cmd->data);
+        RecompQueue_PushIfNotQueued(soundFontLoadQueue, cmd->op, cmd->arg0, cmd->arg1, &cmd->data);
         break;
     default:
         break;
@@ -100,7 +100,7 @@ void AudioApi_SoundFontQueueDrain(AudioApiCmd* cmd) {
 
 void AudioApi_ApplySoundFontChanges(s32 fontId, u8* ramAddr) {
     uintptr_t* fontData = (uintptr_t*)ramAddr;
-    AudioApiCmd* cmd;
+    RecompQueueCmd* cmd;
     Drum** drumOffsets;
     SoundEffect* sfx;
     Instrument* instrument;
