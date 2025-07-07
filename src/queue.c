@@ -47,21 +47,30 @@ void AudioApi_QueueDestroy(AudioApiQueue* queue) {
     recomp_free(queue);
 }
 
-bool AudioApi_QueueCmd(AudioApiQueue* queue, u8 op, s32 arg0, s32 arg1, void** data) {
-    // Only one combination of op + arg0 + arg1 is allowed in the queue
+bool AudioApi_QueueCmd(AudioApiQueue* queue, u32 op, u32 arg0, u32 arg1, void** data) {
+    if (queue->numEntries >= queue->capacity) {
+        if (!AudioApi_QueueGrow(queue)) {
+            return false;
+        }
+    }
+    queue->entries[queue->numEntries++] = (AudioApiCmd){ op, arg0, arg1, (data ? *data : NULL) };
+    return true;
+}
+
+bool AudioApi_QueueCmdIfNotQueued(AudioApiQueue* queue, u32 op, u32 arg0, u32 arg1, void** data) {
+    if (!AudioApi_QueueIsCmdNotQueued(queue, op, arg0, arg1)) {
+        return false;
+    }
+    return AudioApi_QueueCmd(queue, op, arg0, arg1, data);
+}
+
+bool AudioApi_QueueIsCmdNotQueued(AudioApiQueue* queue, u32 op, u32 arg0, u32 arg1) {
     for (s32 i = 0; i < queue->numEntries; i++) {
         AudioApiCmd* cmd = &queue->entries[i];
         if (cmd->op == op && cmd->arg0 == arg0 && cmd->arg1 == arg1) {
             return false;
         }
     }
-    if (queue->numEntries >= queue->capacity) {
-        if (!AudioApi_QueueGrow(queue)) {
-            return false;
-        }
-    }
-
-    queue->entries[queue->numEntries++] = (AudioApiCmd){ op, arg0, arg1, *data };
     return true;
 }
 
@@ -69,5 +78,9 @@ void AudioApi_QueueDrain(AudioApiQueue* queue, void (*drainFunc)(AudioApiCmd* cm
     for (s32 i = 0; i < queue->numEntries; i++) {
         drainFunc(&queue->entries[i]);
     }
+    queue->numEntries = 0;
+}
+
+void AudioApi_QueueEmpty(AudioApiQueue* queue) {
     queue->numEntries = 0;
 }

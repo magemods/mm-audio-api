@@ -38,11 +38,8 @@ RECOMP_EXPORT void AudioApi_ReplaceDrum(s32 fontId, s32 drumId, Drum* drum) {
     if (!copy) {
         return;
     }
-    if (gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING) {
-        AudioApi_QueueCmd(soundFontInitQueue, AUDIOAPI_CMD_OP_REPLACE_DRUM, fontId, drumId, (void**)&copy);
-    } else {
-        AudioApi_QueueCmd(soundFontLoadQueue, AUDIOAPI_CMD_OP_REPLACE_DRUM, fontId, drumId, (void**)&copy);
-    }
+    AudioApiQueue* queue = gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING ? soundFontInitQueue : soundFontLoadQueue;
+    AudioApi_QueueCmdIfNotQueued(queue, AUDIOAPI_CMD_OP_REPLACE_DRUM, fontId, drumId, (void**)&copy);
 }
 
 RECOMP_EXPORT void AudioApi_ReplaceSoundEffect(s32 fontId, s32 sfxId, SoundEffect* sfx) {
@@ -53,11 +50,8 @@ RECOMP_EXPORT void AudioApi_ReplaceSoundEffect(s32 fontId, s32 sfxId, SoundEffec
     if (!copy) {
         return;
     }
-    if (gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING) {
-        AudioApi_QueueCmd(soundFontInitQueue, AUDIOAPI_CMD_OP_REPLACE_SOUNDEFFECT, fontId, sfxId, (void**)&copy);
-    } else {
-        AudioApi_QueueCmd(soundFontLoadQueue, AUDIOAPI_CMD_OP_REPLACE_SOUNDEFFECT, fontId, sfxId, (void**)&copy);
-    }
+    AudioApiQueue* queue = gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING ? soundFontInitQueue : soundFontLoadQueue;
+    AudioApi_QueueCmdIfNotQueued(queue, AUDIOAPI_CMD_OP_REPLACE_SOUNDEFFECT, fontId, sfxId, (void**)&copy);
 }
 
 RECOMP_EXPORT void AudioApi_ReplaceInstrument(s32 fontId, s32 instId, Instrument* instrument) {
@@ -68,11 +62,8 @@ RECOMP_EXPORT void AudioApi_ReplaceInstrument(s32 fontId, s32 instId, Instrument
     if (!copy) {
         return;
     }
-    if (gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING) {
-        AudioApi_QueueCmd(soundFontInitQueue, AUDIOAPI_CMD_OP_REPLACE_INSTRUMENT, fontId, instId, (void**)&copy);
-    } else {
-        AudioApi_QueueCmd(soundFontLoadQueue, AUDIOAPI_CMD_OP_REPLACE_INSTRUMENT, fontId, instId, (void**)&copy);
-    }
+    AudioApiQueue* queue = gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING ? soundFontInitQueue : soundFontLoadQueue;
+    AudioApi_QueueCmdIfNotQueued(queue, AUDIOAPI_CMD_OP_REPLACE_INSTRUMENT, fontId, instId, (void**)&copy);
 }
 
 void AudioApi_SoundFontQueueDrain(AudioApiCmd* cmd) {
@@ -81,7 +72,7 @@ void AudioApi_SoundFontQueueDrain(AudioApiCmd* cmd) {
     case AUDIOAPI_CMD_OP_REPLACE_SOUNDEFFECT:
     case AUDIOAPI_CMD_OP_REPLACE_INSTRUMENT:
         // Move to load queue
-        AudioApi_QueueCmd(soundFontLoadQueue, cmd->op, cmd->arg0, cmd->arg1, &cmd->data);
+        AudioApi_QueueCmdIfNotQueued(soundFontLoadQueue, cmd->op, cmd->arg0, cmd->arg1, &cmd->data);
         break;
     default:
         break;
@@ -92,19 +83,18 @@ void AudioApi_ApplySoundFontChanges(s32 fontId, u8* ramAddr) {
     uintptr_t* fontData = (uintptr_t*)ramAddr;
     AudioApiCmd* cmd;
     Drum** drumOffsets;
-    Drum* drum;
     SoundEffect* sfx;
     Instrument* instrument;
-    s32 numDrums = gAudioCtx.soundFontList[fontId].numDrums;
-    s32 numInstruments = gAudioCtx.soundFontList[fontId].numInstruments;
-    s32 numSfx = gAudioCtx.soundFontList[fontId].numSfx;
+    u32 numDrums = gAudioCtx.soundFontList[fontId].numDrums;
+    u32 numInstruments = gAudioCtx.soundFontList[fontId].numInstruments;
+    u32 numSfx = gAudioCtx.soundFontList[fontId].numSfx;
 
     // The first u32 in fontData is an offset to a list of offsets to the drums
     // The second u32 in fontData is an offset to the first sound effect entry
     // Starting from the 3rd u32 in fontData is the list of offsets to the instruments
     for (s32 i = 0; i < soundFontLoadQueue->numEntries; i++) {
         cmd = &soundFontLoadQueue->entries[i];
-        if (cmd->arg0 != fontId) {
+        if (cmd->arg0 != (u32)fontId) {
             continue;
         }
         switch (cmd->op) {

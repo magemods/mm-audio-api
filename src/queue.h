@@ -22,9 +22,9 @@ typedef enum {
 } AudioApiCmdOp;
 
 typedef struct {
-    AudioApiCmdOp op;
-    s32 arg0;
-    s32 arg1;
+    u32 op;
+    u32 arg0;
+    u32 arg1;
     union {
         void* data;
         f32 asFloat;
@@ -54,7 +54,10 @@ extern AudioApiInitPhase gAudioApiInitPhase;
 
 AudioApiQueue* AudioApi_QueueCreate();
 void AudioApi_QueueDestroy(AudioApiQueue* queue);
-bool AudioApi_QueueCmd(AudioApiQueue* queue, u8 op, s32 arg0, s32 arg1, void** data);
+bool AudioApi_QueueCmd(AudioApiQueue* queue, u32 op, u32 arg0, u32 arg1, void** data);
+bool AudioApi_QueueCmdIfNotQueued(AudioApiQueue* queue, u32 op, u32 arg0, u32 arg1, void** data);
+bool AudioApi_QueueIsCmdNotQueued(AudioApiQueue* queue, u32 op, u32 arg0, u32 arg1);
 void AudioApi_QueueDrain(AudioApiQueue* queue, void (*drainFunc)(AudioApiCmd* cmd));
+void AudioApi_QueueEmpty(AudioApiQueue* queue);
 
 #endif

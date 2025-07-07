@@ -11,6 +11,7 @@ INCBIN(attack1, "src/test/attack1.raw");
 INCBIN(attack2, "src/test/attack2.raw");
 INCBIN(attack3, "src/test/attack3.raw");
 
+RECOMP_IMPORT(".", void AudioApi_StartSequence(u8 seqPlayerIndex, s32 seqId, u16 seqArgs, u16 fadeInDuration));
 RECOMP_IMPORT(".", s32 AudioApi_AddSequence(AudioTableEntry* entry));
 RECOMP_IMPORT(".", void AudioApi_ReplaceSequence(s32 seqId, AudioTableEntry* entry));
 RECOMP_IMPORT(".", void AudioApi_RestoreSequence(s32 seqId));
@@ -42,7 +43,7 @@ s32 newSeqId;
 
 RECOMP_HOOK("Player_Update") void onPlayer_Update(Player* this, PlayState* play) {
     if (CHECK_BTN_ALL(CONTROLLER1(&play->state)->press.button, BTN_L)) {
-        AudioSeq_StartSequence(SEQ_PLAYER_BGM_MAIN, newSeqId, 0, 0);
+        AudioApi_StartSequence(SEQ_PLAYER_BGM_MAIN, newSeqId, 0, 0);
     }
 }
 
@@ -192,6 +193,9 @@ RECOMP_CALLBACK(".", AudioApi_Init) void my_mod_on_init() {
 
         AudioApi_ReplaceSoundEffect(0x00, 33, &mySfx);
     }
+}
+
+RECOMP_CALLBACK(".", AudioApi_Ready) void my_mod_on_ready() {
 }
 
 RECOMP_CALLBACK(".", AudioApi_SequenceLoaded) void my_mod_on_load_sequence(s32 seqId, u8* ramAddr) {
