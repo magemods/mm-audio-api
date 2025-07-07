@@ -3,24 +3,6 @@
 
 #include "global.h"
 
-typedef enum {
-    // Global Commands
-    AUDIOAPI_CMD_OP_NOOP,
-
-    // Sequence Commands
-    AUDIOAPI_CMD_OP_REPLACE_SEQUENCE,
-    AUDIOAPI_CMD_OP_REPLACE_SEQUENCE_FONT,
-    AUDIOAPI_CMD_OP_SET_SEQUENCE_FLAGS,
-
-    // Soundfont Commands
-    AUDIOAPI_CMD_OP_ADD_DRUM,
-    AUDIOAPI_CMD_OP_REPLACE_DRUM,
-    AUDIOAPI_CMD_OP_ADD_SOUNDEFFECT,
-    AUDIOAPI_CMD_OP_REPLACE_SOUNDEFFECT,
-    AUDIOAPI_CMD_OP_ADD_INSTRUMENT,
-    AUDIOAPI_CMD_OP_REPLACE_INSTRUMENT,
-} AudioApiCmdOp;
-
 typedef struct {
     u32 op;
     u32 arg0;
@@ -42,15 +24,6 @@ typedef struct {
     u16 numEntries;
     u16 capacity;
 } AudioApiQueue;
-
-typedef enum {
-    AUDIOAPI_INIT_NOT_READY,
-    AUDIOAPI_INIT_QUEUEING,
-    AUDIOAPI_INIT_QUEUED,
-    AUDIOAPI_INIT_READY,
-} AudioApiInitPhase;
-
-extern AudioApiInitPhase gAudioApiInitPhase;
 
 AudioApiQueue* AudioApi_QueueCreate();
 void AudioApi_QueueDestroy(AudioApiQueue* queue);

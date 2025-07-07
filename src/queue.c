@@ -4,8 +4,6 @@
 
 #define QUEUE_INITIAL_CAPACITY 16
 
-AudioApiInitPhase gAudioApiInitPhase = AUDIOAPI_INIT_NOT_READY;
-
 AudioApiQueue* AudioApi_QueueCreate() {
     AudioApiQueue* queue = recomp_alloc(sizeof(AudioApiQueue));
     if (!queue) return NULL;

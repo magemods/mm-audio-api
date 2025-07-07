@@ -2,20 +2,18 @@
 #include "modding.h"
 
 /**
- * The purpose of this file is to patch various functions found in thread.c and sequence.c
- * addding extended audio commands to the existing queue system in order to support more
- * than 255 sequences.
+ * This file patches various functions found in thread.c and sequence.c addding extended audio
+ * commands to the existing queue system in order to support more than 255 sequences.
  *
- * For the sequence command system, all of the args are bitpacked into a single u32. This
- * causes problems for commands like SEQCMD_PLAY_SEQUENCE since it must store the the
- * sequence player index, fade in duration, priority, sequence args, and the sequence ID.
- * This system is replaced by a custom queue system from queue.c that allows a lot more
- * data.
+ * For the sequence command system, all of the args are bitpacked into a single u32. This causes
+ * problems for commands like SEQCMD_PLAY_SEQUENCE since it must store the the sequence player index,
+ * fade in duration, priority, sequence args, and the sequence ID. This system is replaced by a
+ * custom queue system from queue.c that allows a lot more data.
  *
- * For the global command system, it already uses a queue similar to the custom version.
- * In fact, queue.c was directly inspired by it. The problem is that it was not efficent
- * in using the available space, usually wasting an entire 32-bit field. The extended
- * commands simply make better usage of the available space.
+ * For the global command system, it already uses a queue similar to the custom version. In fact,
+ * queue.c was directly inspired by it. The problem is that it was not efficent in using the
+ * available space, usually wasting an entire 32-bit field. The extended commands simply make better
+ * usage of the available space.
  */
 
 extern void AudioSeq_ProcessSeqCmd(u32 cmd);

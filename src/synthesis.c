@@ -2,6 +2,27 @@
 #include "modding.h"
 #include "recomputils.h"
 
+/**
+ * This file adds full support for playing PCM-16 (PCM signed 16-bit big-endian) files. Some support
+ * for this codec is present in the vanilla ROM, but the code is incomplete.
+ *
+ * You can encode your files for PCM-16 using either Audacity or ffmpeg.
+ *
+ * Audacity
+ * ========
+ * When exporting, first select "Other uncompressed files". Then select these options:
+ *   Mono, 32000 Hz, "RAW (header-less)", and "Signed 16-bit PCM"
+ *
+ * Export the file with a name such as "my-sample.raw" and then use GNU binutils to byte-swap:
+ *   objcopy -I binary -O binary --reverse-bytes=2 path/to/my-sample.raw
+ *
+ * ffmpeg
+ * ======
+ * Use a command similar to this:
+ *   ffmpeg -i input.wav -acodec pcm_s16be -f s16be -ac 1 -ar 16000 my-sample.raw
+ *
+ */
+
 // DMEM Addresses for the RSP
 #define DMEM_TEMP 0x3B0
 #define DMEM_TEMP2 0x3C0
@@ -27,8 +48,8 @@ Acmd* AudioSynth_SaveResampledReverbSamplesImpl(Acmd* cmd, u16 dmem, u16 size, u
 Acmd* AudioSynth_LoadReverbSamplesImpl(Acmd* cmd, u16 dmem, u16 startPos, s32 size, SynthesisReverb* reverb);
 Acmd* AudioSynth_SaveReverbSamplesImpl(Acmd* cmd, u16 dmem, u16 startPos, s32 size, SynthesisReverb* reverb);
 Acmd* AudioSynth_ProcessSamples(s16* aiBuf, s32 numSamplesPerUpdate, Acmd* cmd, s32 updateIndex);
-Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* sampleState, NoteSynthesisState* synthState, s16* aiBuf,
-                               s32 numSamplesPerUpdate, Acmd* cmd, s32 updateIndex);
+Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* sampleState, NoteSynthesisState* synthState,
+                               s16* aiBuf, s32 numSamplesPerUpdate, Acmd* cmd, s32 updateIndex);
 Acmd* AudioSynth_ApplySurroundEffect(Acmd* cmd, NoteSampleState* sampleState, NoteSynthesisState* synthState,
                                      s32 numSamplesPerUpdate, s32 haasDmem, s32 flags);
 Acmd* AudioSynth_FinalResample(Acmd* cmd, NoteSynthesisState* synthState, s32 size, u16 pitch, u16 inpDmem,
@@ -37,8 +58,8 @@ Acmd* AudioSynth_ProcessEnvelope(Acmd* cmd, NoteSampleState* sampleState, NoteSy
                                  s32 numSamplesPerUpdate, u16 dmemSrc, s32 haasEffectDelaySide, s32 flags);
 Acmd* AudioSynth_LoadWaveSamples(Acmd* cmd, NoteSampleState* sampleState, NoteSynthesisState* synthState,
                                  s32 numSamplesToLoad);
-Acmd* AudioSynth_ApplyHaasEffect(Acmd* cmd, NoteSampleState* sampleState, NoteSynthesisState* synthState, s32 size,
-                                 s32 flags, s32 haasEffectDelaySide);
+Acmd* AudioSynth_ApplyHaasEffect(Acmd* cmd, NoteSampleState* sampleState, NoteSynthesisState* synthState,
+                                 s32 size, s32 flags, s32 haasEffectDelaySide);
 void AudioSynth_LoadBuffer(Acmd* cmd, s32 dmemDest, s32 size, void* addrSrc);
 void AudioSynth_ClearBuffer(Acmd* cmd, s32 dmem, s32 size);
 void AudioSynth_SetBuffer(Acmd* cmd, s32 flags, s32 dmemIn, s32 dmemOut, size_t size);
@@ -54,7 +75,9 @@ void AudioSynth_SaveBuffer(Acmd* cmd, s32 dmemSrc, s32 size, void* addrDest);
 void AudioSynth_LoadFilterSize(Acmd* cmd, size_t size, s16* addr);
 
 __attribute__((optnone))
-RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* sampleState, NoteSynthesisState* synthState, s16* aiBuf, s32 numSamplesPerUpdate, Acmd* cmd, s32 updateIndex) {
+RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* sampleState,
+                                            NoteSynthesisState* synthState, s16* aiBuf,
+                                            s32 numSamplesPerUpdate, Acmd* cmd, s32 updateIndex) {
     s32 pad1[2];
     void* reverbAddrSrc;
     Sample* sample;
@@ -289,7 +312,8 @@ RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* samp
                     case CODEC_REVERB:
                         reverbAddrSrc = (void*)0xFFFFFFFF;
                         if (gAudioCustomReverbFunction != NULL) {
-                            reverbAddrSrc = gAudioCustomReverbFunction(sample, numSamplesToLoadAdj, flags, noteIndex);
+                            reverbAddrSrc = gAudioCustomReverbFunction(sample, numSamplesToLoadAdj,
+                                                                       flags, noteIndex);
                         }
 
                         if (reverbAddrSrc == (void*)0xFFFFFFFF) {
@@ -318,7 +342,7 @@ RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* samp
                         goto skip;
 
                     case CODEC_S16:
-                        // @mod
+                        // @mod add support for PCM 16
                         sampleDataChunkSize = ALIGN16(MIN(numSamplesToProcess, numSamplesUntilEnd) * SAMPLE_SIZE);
                         samplesToLoadAddr =
                             AudioLoad_DmaSampleData((uintptr_t)(sampleAddr + synthState->samplePosInt * SAMPLE_SIZE),
@@ -357,8 +381,8 @@ RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* samp
                         // This medium is not in ram, so dma the requested sample into ram
                         samplesToLoadAddr =
                             AudioLoad_DmaSampleData((uintptr_t)(sampleAddr + (zeroOffset + sampleAddrOffset)),
-                                                    ALIGN16((numFramesToDecode * frameSize) + SAMPLES_PER_FRAME), flags,
-                                                    &synthState->sampleDmaIndex, sample->medium);
+                                                    ALIGN16((numFramesToDecode * frameSize) + SAMPLES_PER_FRAME),
+                                                    flags, &synthState->sampleDmaIndex, sample->medium);
                     }
 
                     if (samplesToLoadAddr == NULL) {
@@ -505,8 +529,8 @@ RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* samp
 
                         case 1:
                             AudioSynth_InterL(cmd++, DMEM_UNCOMPRESSED_NOTE + skipBytes,
-                                              DMEM_TEMP + (SAMPLES_PER_FRAME * SAMPLE_SIZE) + numSamplesToLoadFirstPart,
-                                              ALIGN8(numSamplesToLoadAdj / 2));
+                                              DMEM_TEMP + (SAMPLES_PER_FRAME * SAMPLE_SIZE) +
+                                              numSamplesToLoadFirstPart, ALIGN8(numSamplesToLoadAdj / 2));
                             break;
 
                         default:
@@ -571,8 +595,8 @@ RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* samp
         } else {
             AudioSynth_LoadBuffer(cmd++, combFilterDmem, combFilterSize, combFilterState);
         }
-        AudioSynth_SaveBuffer(cmd++, DMEM_TEMP + (numSamplesPerUpdate * SAMPLE_SIZE) - combFilterSize, combFilterSize,
-                              combFilterState);
+        AudioSynth_SaveBuffer(cmd++, DMEM_TEMP + (numSamplesPerUpdate * SAMPLE_SIZE) - combFilterSize,
+                              combFilterSize, combFilterState);
         AudioSynth_Mix(cmd++, (numSamplesPerUpdate * (s32)SAMPLE_SIZE) >> 4, combFilterGain, DMEM_COMB_TEMP,
                        combFilterDmem);
         AudioSynth_DMemMove(cmd++, combFilterDmem, DMEM_TEMP, numSamplesPerUpdate * SAMPLE_SIZE);
@@ -594,23 +618,24 @@ RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* samp
         sampleState->targetVolLeft = sampleState->targetVolLeft >> 1;
         sampleState->targetVolRight = sampleState->targetVolRight >> 1;
         if (sampleState->surroundEffectIndex != 0xFF) {
-            cmd = AudioSynth_ApplySurroundEffect(cmd, sampleState, synthState, numSamplesPerUpdate, DMEM_TEMP, flags);
+            cmd = AudioSynth_ApplySurroundEffect(cmd, sampleState, synthState, numSamplesPerUpdate,
+                                                 DMEM_TEMP, flags);
         }
     }
 
     // Split the mono-signal into left and right channels:
     // Both for dry signal (to go to the speakers now)
     // and for wet signal (to go to a reverb buffer to be stored, and brought back later to produce an echo)
-    cmd = AudioSynth_ProcessEnvelope(cmd, sampleState, synthState, numSamplesPerUpdate, DMEM_TEMP, haasEffectDelaySide,
-                                     flags);
+    cmd = AudioSynth_ProcessEnvelope(cmd, sampleState, synthState, numSamplesPerUpdate, DMEM_TEMP,
+                                     haasEffectDelaySide, flags);
 
     // Apply the haas effect by delaying either the left or the right channel by a small amount
     if (sampleState->bitField1.useHaasEffect) {
         if (!(flags & A_INIT)) {
             flags = A_CONTINUE;
         }
-        cmd = AudioSynth_ApplyHaasEffect(cmd, sampleState, synthState, numSamplesPerUpdate * (s32)SAMPLE_SIZE, flags,
-                                         haasEffectDelaySide);
+        cmd = AudioSynth_ApplyHaasEffect(cmd, sampleState, synthState, numSamplesPerUpdate * (s32)SAMPLE_SIZE,
+                                         flags, haasEffectDelaySide);
     }
 
     return cmd;

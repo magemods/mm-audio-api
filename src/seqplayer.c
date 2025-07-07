@@ -7,9 +7,9 @@
 #include "audio/aseq.h"
 
 /**
- * The purpose of this file is to patch just a few functions found in seqplayer.c in order to
- * support more than 256 sequences. The vanilla SequencePlayer stuct has an `u8 seqId` on it,
- * so we need to track our own values in the `sExtSeqPlayersSeqId` array below.
+ * This file patches just a few functions found in seqplayer.c in order to support more than 256
+ * sequences. The vanilla SequencePlayer stuct has an `u8 seqId` on it, so we need to track our own
+ * values in the `sExtSeqPlayersSeqId` array below.
  */
 
 #define PROCESS_SCRIPT_END -1

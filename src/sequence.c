@@ -1,14 +1,39 @@
 #include "global.h"
 #include "modding.h"
 #include "recomputils.h"
+#include "init.h"
 #include "sequence_functions.h"
 #include "queue.h"
 #include "util.h"
+
+/**
+ * This file provides the public API for modifying sequences in the various sequence tables
+ *
+ * There are two main tables for sequence data: `gSequenceTable` and `gSequenceFontTable`.
+ *
+ * The first table contains the ROM address, medium, size, and cache policy. For custom sequences,
+ * we set the romAddr field to the location in mod memory where the sequence is.
+ *
+ * The second table associates sequences with the fonts they require. Sequence 0 is the only entry
+ * that contains more than one font, but this mod expands the table to allow up to four fonts each.
+ *
+ * There are also two arrays, `sSeqFlags` and `sSeqLoadStatus` which are expanded to allow more than
+ * the hardcoded length of the array.
+ *
+ * The API will need to allow some way to also modify sequence data, but for now such changes must
+ * be done using the `AudioApi_SequenceLoaded()` event, if necessary.
+ */
 
 #define MAX_FONTS_PER_SEQUENCE 4
 
 extern u32 AudioLoad_GetRealTableIndex(s32 tableType, u32 id);
 extern void* AudioLoad_SyncLoad(s32 tableType, u32 id, s32* didAllocate);
+
+typedef enum {
+    AUDIOAPI_CMD_OP_REPLACE_SEQUENCE,
+    AUDIOAPI_CMD_OP_REPLACE_SEQUENCE_FONT,
+    AUDIOAPI_CMD_OP_SET_SEQUENCE_FLAGS,
+} AudioApiSequenceQueueOp;
 
 AudioApiQueue* sequenceQueue;
 u16 sequenceTableCapacity = NA_BGM_MAX;

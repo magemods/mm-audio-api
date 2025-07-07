@@ -1,7 +1,26 @@
 #include "global.h"
 #include "modding.h"
 #include "recomputils.h"
+#include "init.h"
 #include "queue.h"
+
+/**
+ * This file provides the public API for creating and modifying soundfont data
+ *
+ * Since the soundfonts are only read from the ROM when needed, we need to queue actions until the
+ * font is actually loaded. Additionally, if adding instruments to an existing font on the ROM, we
+ * will need to calculate the new size before the DMA process.
+ *
+ */
+
+typedef enum {
+    AUDIOAPI_CMD_OP_ADD_DRUM,
+    AUDIOAPI_CMD_OP_REPLACE_DRUM,
+    AUDIOAPI_CMD_OP_ADD_SOUNDEFFECT,
+    AUDIOAPI_CMD_OP_REPLACE_SOUNDEFFECT,
+    AUDIOAPI_CMD_OP_ADD_INSTRUMENT,
+    AUDIOAPI_CMD_OP_REPLACE_INSTRUMENT,
+} AudioApiSoundFontQueueOp;
 
 AudioApiQueue* soundFontInitQueue;
 AudioApiQueue* soundFontLoadQueue;

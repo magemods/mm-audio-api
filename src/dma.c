@@ -1,166 +1,35 @@
 #include "global.h"
 #include "modding.h"
-#include "recomputils.h"
-#include "queue.h"
 
-// Internal events
-RECOMP_DECLARE_EVENT(AudioApi_InitInternal());
-RECOMP_DECLARE_EVENT(AudioApi_ReadyInternal());
-
-// Public events
-RECOMP_DECLARE_EVENT(AudioApi_Init());
-RECOMP_DECLARE_EVENT(AudioApi_Ready());
-RECOMP_DECLARE_EVENT(AudioApi_AfterSyncDma(uintptr_t devAddr, u8* ramAddr));
+/**
+ * This file provides various DMA related functions. It is responsible for intercepting DMA requests
+ * and returning chunks from mod memory.
+ */
 
 extern DmaHandler sDmaHandler;
-extern u8 gAudioHeap[0x138000];
-extern void AudioLoad_InitTable(AudioTable* table, uintptr_t romAddr, u16 unkMediumParam);
-extern void AudioLoad_InitSoundFont(s32 fontId);
 
-/* -------------------------------------------------------------------------- */
+uintptr_t sDevAddr = 0;
+u8* sRamAddr = NULL;
 
-RECOMP_PATCH void AudioLoad_Init(void* heap, size_t heapSize) {
-    s32 pad1[9];
-    s32 numFonts;
-    s32 pad2[2];
-    u8* audioCtxPtr;
-    void* addr;
-    s32 i;
-    s32 j;
+RECOMP_DECLARE_EVENT(AudioApi_AfterSyncDma(uintptr_t devAddr, u8* ramAddr));
 
-    gAudioCustomUpdateFunction = NULL;
-    gAudioCustomReverbFunction = NULL;
-    gAudioCustomSynthFunction = NULL;
-
-    for (i = 0; i < ARRAY_COUNT(gAudioCtx.customSeqFunctions); i++) {
-        gAudioCtx.customSeqFunctions[i] = NULL;
-    }
-
-    gAudioCtx.resetTimer = 0;
-    gAudioCtx.unk_29B8 = false;
-
-    // Set all of gAudioCtx to 0
-    audioCtxPtr = (u8*)&gAudioCtx;
-    for (j = sizeof(gAudioCtx); j >= 0; j--) {
-        *audioCtxPtr++ = 0;
-    }
-
-    switch (osTvType) {
-        case OS_TV_PAL:
-            gAudioCtx.unk_2960 = 20.03042f;
-            gAudioCtx.refreshRate = 50;
-            break;
-
-        case OS_TV_MPAL:
-            gAudioCtx.unk_2960 = 16.546f;
-            gAudioCtx.refreshRate = 60;
-            break;
-
-        case OS_TV_NTSC:
-        default:
-            gAudioCtx.unk_2960 = 16.713f;
-            gAudioCtx.refreshRate = 60;
-            break;
-    }
-
-    AudioThread_InitMesgQueues();
-
-    for (i = 0; i < ARRAY_COUNT(gAudioCtx.numSamplesPerFrame); i++) {
-        gAudioCtx.numSamplesPerFrame[i] = 0xA0;
-    }
-
-    gAudioCtx.totalTaskCount = 0;
-    gAudioCtx.rspTaskIndex = 0;
-    gAudioCtx.curAiBufferIndex = 0;
-    gAudioCtx.soundMode = SOUNDMODE_STEREO;
-    gAudioCtx.curTask = NULL;
-    gAudioCtx.rspTask[0].task.t.data_size = 0;
-    gAudioCtx.rspTask[1].task.t.data_size = 0;
-
-    osCreateMesgQueue(&gAudioCtx.syncDmaQueue, &gAudioCtx.syncDmaMesg, 1);
-    osCreateMesgQueue(&gAudioCtx.curAudioFrameDmaQueue, gAudioCtx.currAudioFrameDmaMesgBuf,
-                      ARRAY_COUNT(gAudioCtx.currAudioFrameDmaMesgBuf));
-    osCreateMesgQueue(&gAudioCtx.externalLoadQueue, gAudioCtx.externalLoadMesgBuf,
-                      ARRAY_COUNT(gAudioCtx.externalLoadMesgBuf));
-    osCreateMesgQueue(&gAudioCtx.preloadSampleQueue, gAudioCtx.preloadSampleMesgBuf,
-                      ARRAY_COUNT(gAudioCtx.preloadSampleMesgBuf));
-    gAudioCtx.curAudioFrameDmaCount = 0;
-    gAudioCtx.sampleDmaCount = 0;
-    gAudioCtx.cartHandle = osCartRomInit();
-
-    if (heap == NULL) {
-        gAudioCtx.audioHeap = gAudioHeap;
-        gAudioCtx.audioHeapSize = gAudioHeapInitSizes.heapSize;
-    } else {
-        void** hp = &heap;
-
-        gAudioCtx.audioHeap = *hp;
-        gAudioCtx.audioHeapSize = heapSize;
-    }
-
-    for (i = 0; i < ((s32)gAudioCtx.audioHeapSize / (s32)sizeof(u64)); i++) {
-        ((u64*)gAudioCtx.audioHeap)[i] = 0;
-    }
-
-    // Main Pool Split (split entirety of audio heap into initPool and sessionPool)
-    AudioHeap_InitMainPool(gAudioHeapInitSizes.initPoolSize);
-
-    // Initialize the audio interface buffers
-    for (i = 0; i < ARRAY_COUNT(gAudioCtx.aiBuffers); i++) {
-        gAudioCtx.aiBuffers[i] = AudioHeap_AllocZeroed(&gAudioCtx.initPool, AIBUF_LEN * sizeof(s16));
-    }
-
-    // Connect audio tables to their tables in memory
-    gAudioCtx.sequenceTable = (AudioTable*)gSequenceTable;
-    gAudioCtx.soundFontTable = &gSoundFontTable;
-    gAudioCtx.sampleBankTable = &gSampleBankTable;
-    gAudioCtx.sequenceFontTable = gSequenceFontTable;
-
-    // Initialize audio tables
-    AudioLoad_InitTable(gAudioCtx.sequenceTable, SEGMENT_ROM_START(Audioseq), 0);
-    AudioLoad_InitTable(gAudioCtx.soundFontTable, SEGMENT_ROM_START(Audiobank), 0);
-    AudioLoad_InitTable(gAudioCtx.sampleBankTable, SEGMENT_ROM_START(Audiotable), 0);
-
-    // @mod Dispatch internal event for API to initialize tables
-    AudioApi_InitInternal();
-
-    // @mod Dispatch event for mods to queue audio changes
-    gAudioApiInitPhase = AUDIOAPI_INIT_QUEUEING;
-    AudioApi_Init();
-
-    // @mod Dispatch internal event for API to drain queues
-    gAudioApiInitPhase = AUDIOAPI_INIT_QUEUED;
-    AudioApi_ReadyInternal();
-
-    // @mod Dispatch event for mods to potentially interact with other mods
-    gAudioApiInitPhase = AUDIOAPI_INIT_READY;
-    AudioApi_Ready();
-
-    gAudioCtx.numSequences = gAudioCtx.sequenceTable->header.numEntries;
-
-    gAudioCtx.specId = 0;
-    gAudioCtx.resetStatus = 1; // Set reset to immediately initialize the audio heap
-    AudioHeap_ResetStep();
-
-    numFonts = gAudioCtx.soundFontTable->header.numEntries;
-    gAudioCtx.soundFontList = AudioHeap_Alloc(&gAudioCtx.initPool, numFonts * sizeof(SoundFont));
-
-    for (i = 0; i < numFonts; i++) {
-        AudioLoad_InitSoundFont(i);
-    }
-
-    if (addr = AudioHeap_Alloc(&gAudioCtx.initPool, gAudioHeapInitSizes.permanentPoolSize), addr == NULL) {
-        gAudioHeapInitSizes.permanentPoolSize = 0;
-    }
-
-    AudioHeap_InitPool(&gAudioCtx.permanentPool, addr, gAudioHeapInitSizes.permanentPoolSize);
-    gAudioCtxInitialized = true;
-    osSendMesg(gAudioCtx.taskStartQueueP, (void*)gAudioCtx.totalTaskCount, OS_MESG_NOBLOCK);
+/**
+ * Dispatch an event whenever a synchronous audio DMA request is completed
+ */
+RECOMP_HOOK("AudioLoad_SyncDma") void AudioLoad_onSyncDma(uintptr_t devAddr, u8* ramAddr, size_t size, s32 medium) {
+    sDevAddr = devAddr;
+    sRamAddr = ramAddr;
 }
 
-/* -------------------------------------------------------------------------- */
+RECOMP_HOOK_RETURN("AudioLoad_SyncDma") void AudioLoad_afterSyncDma() {
+    AudioApi_AfterSyncDma(sDevAddr, sRamAddr);
+}
 
-// Our custom function
+
+/**
+ * Patch AudioLoad_Dma which will either call AudioApi_Dma_Mod which loads custom audio,
+ * or AudioApi_Dma_Rom which loads from the vanilla ROM.
+ */
 s32 AudioApi_Dma_Mod(OSIoMesg* mesg, u32 priority, s32 direction, uintptr_t devAddr, void* ramAddr,
                      size_t size, OSMesgQueue* reqQueue, s32 medium, const char* dmaFuncType) {
       osSendMesg(reqQueue, NULL, OS_MESG_NOBLOCK);
@@ -168,7 +37,6 @@ s32 AudioApi_Dma_Mod(OSIoMesg* mesg, u32 priority, s32 direction, uintptr_t devA
       return 0;
 }
 
-// The original function
 s32 AudioApi_Dma_Rom(OSIoMesg* mesg, u32 priority, s32 direction, uintptr_t devAddr, void* ramAddr,
                      size_t size, OSMesgQueue* reqQueue, s32 medium, const char* dmaFuncType) {
     OSPiHandle* handle;
@@ -215,8 +83,13 @@ RECOMP_PATCH s32 AudioLoad_Dma(OSIoMesg* mesg, u32 priority, s32 direction, uint
     }
 }
 
-/* -------------------------------------------------------------------------- */
 
+/**
+ * This function is patched solely to fix a bug in vanilla MM, only two lines are changed.
+ * There are 96 sample DMA buffers. The first 72 are 0x500 in size, and the last 24 are 0x200 in size.
+ * But, if you try to load a sample chunk greater than 0x200, there's an integer underflow while checking
+ * the buffers that are only 0x200, and the game thinks the chunk has already been loaded.
+ */
 RECOMP_PATCH void* AudioLoad_DmaSampleData(uintptr_t devAddr, size_t size, s32 arg2, u8* dmaIndexRef, s32 medium) {
     s32 pad1;
     SampleDma* dma;
@@ -311,18 +184,4 @@ RECOMP_PATCH void* AudioLoad_DmaSampleData(uintptr_t devAddr, size_t size, s32 a
                   dmaDevAddr, dma->ramAddr, transfer, &gAudioCtx.curAudioFrameDmaQueue, medium, "SUPERDMA");
     *dmaIndexRef = dmaIndex;
     return (devAddr - dmaDevAddr) + dma->ramAddr;
-}
-
-/* -------------------------------------------------------------------------- */
-
-static uintptr_t sDevAddr = 0;
-static u8* sRamAddr = NULL;
-
-RECOMP_HOOK("AudioLoad_SyncDma") void AudioLoad_onSyncDma(uintptr_t devAddr, u8* ramAddr, size_t size, s32 medium) {
-    sDevAddr = devAddr;
-    sRamAddr = ramAddr;
-}
-
-RECOMP_HOOK_RETURN("AudioLoad_SyncDma") void AudioLoad_afterSyncDma() {
-    AudioApi_AfterSyncDma(sDevAddr, sRamAddr);
 }

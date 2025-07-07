@@ -4,17 +4,16 @@
 #include "audio_cmd.h"
 
 /**
- * The purpose of this file is to patch various functions found in sequence.c and code_8019AF00.c
- * in order to support more than 256 sequences, as well as provide new exported functions for the
- * same purpose.
+ * This file patches various functions found in sequence.c and code_8019AF00.c in order to support
+ * more than 256 sequences, as well as provide new exported functions for the same purpose.
  *
- * The main issue is that sequence IDs are either stored as u8, or u16. In the latter case, this
- * is actually `(seqArgs << 8) | seqId`, which means we are still limited to 8 bits for the seqId.
+ * The main issue is that sequence IDs are either stored as u8, or u16. In the latter case, this is
+ * actually `(seqArgs << 8) | seqId`, which means we are still limited to 8 bits for the seqId.
  *
- * All of the newly exported functions have seqId and seqArgs as separate parameters, otherwise
- * the function signature should be the same as the vanilla functions, which have been patched to
- * use the newly defined functions. These vanilla functions will continue to work with seqId being
- * the bits for seqId and seqArgs combined.
+ * All of the newly exported functions have seqId and seqArgs as separate parameters, otherwise the
+ * function signature should be the same as the vanilla functions, which have been patched to use
+ * the newly defined functions. These vanilla functions will continue to work with seqId being the
+ * bits for seqId and seqArgs combined.
  *
  * One important note is that using `AudioSeq_GetActiveSeqId()` when a custom sequence is playing
  * will return the value 0xFE. This represents a sequence unknown to the vanilla game, since we

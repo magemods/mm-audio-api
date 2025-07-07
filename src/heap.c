@@ -2,9 +2,7 @@
 #include "modding.h"
 
 /**
- * The purpose of this file is to patch just a few functions found in heap.c in order to
- * support more than 256 sequences. This file will also likely be responsible for handling
- * unlimited soundfont entries as well.
+ * This file patches a few functions found in heap.c in order to support more than 256 sequences.
  */
 
 void AudioHeap_DiscardSampleBank(s32 sampleBankId);
