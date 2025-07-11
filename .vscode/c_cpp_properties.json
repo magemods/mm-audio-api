@@ -1,10 +1,39 @@
 {
     "configurations": [
         {
-            "name": "Mod",
+            "name": "Combined",
             "includePath": [
-                "${workspaceFolder}/include",
-                "${workspaceFolder}/include/dummy_headers",
+                "${workspaceFolder}/include/shared/",
+                "${workspaceFolder}/include/mod/",
+                "${workspaceFolder}/include/mod/dummy_headers",
+                "${workspaceFolder}/include/extlib",
+                "${workspaceFolder}/src/extlib",
+                "${workspaceFolder}/src/mod",
+                "${workspaceFolder}/mm-decomp/include",
+                "${workspaceFolder}/mm-decomp/src",
+                "${workspaceFolder}/offline_build",
+                "${workspaceFolder}/assets_extracted",
+                "${workspaceFolder}/assets_extracted/assets",
+                "${workspaceFolder}/mm-decomp/extracted/n64-us"
+            ],
+            "defines": [
+                "F3DEX_GBI_2",
+                "_LANGUAGE_C",
+                "MIPS",
+                "COMBINED_INTELLISENSE"
+            ],
+            // "compilerPath": "clang",
+            "cStandard": "c99",
+            "cppStandard": "c++20"
+            // "intelliSenseMode": "clang-x86"
+        },
+        {
+            "name": "Mod_Only",
+            "includePath": [
+                "${workspaceFolder}/include/shared/",
+                "${workspaceFolder}/include/mod/",
+                "${workspaceFolder}/include/mod/dummy_headers",
+                "${workspaceFolder}/include/lib",
                 "${workspaceFolder}/mm-decomp/include",
                 "${workspaceFolder}/mm-decomp/src",
                 "${workspaceFolder}/assets_extracted",
@@ -19,6 +48,33 @@
             "compilerPath": "clang",
             "cStandard": "c99",
             "intelliSenseMode": "clang-x86"
+        },
+        {
+            "name": "Lib_Win32_Only",
+            "cppStandard": "c++20",
+            "includePath": [
+                "${workspaceFolder}/include/shared/",
+                "${workspaceFolder}/include/extlib",
+                "${workspaceFolder}/offline_build"
+            ]
+        },
+        {
+            "name": "Lib_Mac_Only",
+            "cppStandard": "c++20",
+            "includePath": [
+                "${workspaceFolder}/include/shared/",
+                "${workspaceFolder}/include/extlib",
+                "${workspaceFolder}/offline_build"
+            ]
+        },
+        {
+            "name": "Lib_Linux_Only",
+            "cppStandard": "c++20",
+            "includePath": [
+                "${workspaceFolder}/include/shared/",
+                "${workspaceFolder}/include/extlib",
+                "${workspaceFolder}/offline_build"
+            ]
         }
     ],
     "version": 4

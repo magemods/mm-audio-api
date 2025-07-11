@@ -1,0 +1,89 @@
+# To use this workflow, you need to perform some setup on GitHub first in your repository settings.
+# * Under `Actions->General`, set "Workflow permissions" to "Read and write permissions"
+# * Under `Secrets and Variables->Actions->Secrets`, Create a repository secret named THUNDERSTORE_SERVICE_TOKEN with your Thunderstore Service Account token.
+# * Under `Secrets and Variables->Actions->Variables`, Create a repository variable named Compilation with your Thunderstore team name.
+# * * Alternatively, you can just declare your Thunderstore team in this file in the `publish_thunderstore_release` step.
+# * * HOWEVER, NEVER STORE YOUR THUNDERSTORE TOKEN IN THIS FILE. OTHERWISE, OTHER PEOPLE WILL BE ABLE TO UPLOAD MODS/UPDATES AS YOU.
+
+name: Build and Publish mod
+on:
+  push:
+    tags:
+      - "release-*.*.*"
+jobs:
+  build:
+    outputs:
+      thunderstore-package: ${{ steps.create-thunderstore-package.outputs.artifact-id }}
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repo
+      id: checkout_repo
+      uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+
+    - name: Get Apt Packages
+      id: get_apt_packages
+      run: |-
+        sudo apt install -y clang lld ninja-build jq
+
+    - name: Get Snap Packages
+      id: get_snap_packages
+      run: |-
+        sudo snap install zig --classic --beta
+
+    - name: Run Buildscript
+      id: run_buildscript
+      run: |-
+        make thunderstore
+
+    - name: Upload Build Artifacts
+      id: upload_build_artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ThunderstorePackage
+        path: |
+          ./thunderstore_package/*
+
+    - name: Read Thunderstore Manifest
+      id: read_thunderstore_manifest
+      run: |
+        NAME=$(jq -r '.name' ${{ github.workspace }}/thunderstore_package/manifest.json)
+        VERSION=$(jq -r '.version_number' ${{ github.workspace }}/thunderstore_package/manifest.json)
+        DESCRIPTION=$(jq -r '.description' ${{ github.workspace }}/thunderstore_package/manifest.json)
+        echo "name=$NAME" >> "$GITHUB_OUTPUT"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "description=$DESCRIPTION" >> "$GITHUB_OUTPUT"
+
+    # Remove this step if you don't want to publish to GitHub as well.
+    - name: Publish Github Release
+      id: publish_github_release
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        name: Release ${{ steps.read_thunderstore_manifest.outputs.version }}
+        body_path: ./thunderstore_package/CHANGELOG.md
+        files: |
+          ./thunderstore_package/*.nrm
+          ./thunderstore_package/*.dll
+          ./thunderstore_package/*.dylib
+          ./thunderstore_package/*.so
+          ./*thunderstore.zip
+        make_latest: true
+
+    - name: Publish Thunderstore Release
+      id: publish_thunderstore_release
+      uses: GreenTF/upload-thunderstore-package@v4.3
+      with:
+        repo: thunderstore.io
+        token: ${{ secrets.THUNDERSTORE_SERVICE_TOKEN }}
+        community: zelda-64-recompiled
+        namespace: ${{ vars.THUNDERSTORE_TEAM }} # the thunderstore 'team' to publish under
+        name: ${{ steps.read_thunderstore_manifest.outputs.name }} # the name of the package
+        description: ${{ steps.read_thunderstore_manifest.outputs.description }}
+        version: ${{ steps.read_thunderstore_manifest.outputs.version }}
+        categories: | # valid categories are 'audio', 'misc', 'libraries', 'modpacks', and 'mods'.
+          mods
+        file: ./${{ steps.read_thunderstore_manifest.outputs.name }}.thunderstore.zip
+
+    
