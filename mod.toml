@@ -40,6 +40,7 @@ dependencies = [
 
 # Native libraries (e.g. DLLs) and the functions they export.
 native_libraries = [
+   { name = "mm_audio_api_extlib", funcs = [] }
 ]
 
 # Inputs to the mod tool.
@@ -66,7 +67,7 @@ additional_files = [
 [extlib_compiling]
 
 # # Name of the extlib. This information is passed to CMake as the target name for the extlib.
-library_name = "mm_recomp_mod_template_extlib"
+library_name = "mm_audio_api_extlib"
 
 # Your CMake presets in this file should be designed to handle cross-compilation (using the provided
 # Zig toolchain is recommended). When building the mod, CMake will be invoked 3 times to build
