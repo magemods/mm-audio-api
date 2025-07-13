@@ -209,16 +209,6 @@ RECOMP_EXPORT void AudioApi_RestoreSequenceFlags(s32 seqId) {
     AudioApi_SetSequenceFlagsInternal(seqId, sSeqFlags[seqId]);
 }
 
-RECOMP_CALLBACK(".", AudioApi_AfterSyncDma) void AudioApi_SequenceAfterSyncDma(uintptr_t devAddr, u8* ramAddr) {
-    for (s32 seqId = 0; seqId < gAudioCtx.sequenceTable->header.numEntries; seqId++) {
-        AudioTableEntry* entry = &gAudioCtx.sequenceTable->entries[seqId];
-        if (entry->romAddr == devAddr) {
-            AudioApi_SequenceLoaded(seqId, ramAddr);
-            return;
-        }
-    }
-}
-
 void AudioApi_SequenceQueueDrain(RecompQueueCmd* cmd) {
     switch (cmd->op) {
     case AUDIOAPI_CMD_OP_REPLACE_SEQUENCE:
@@ -361,8 +351,12 @@ RECOMP_PATCH u8* AudioLoad_SyncLoadSeq(s32 seqId) {
     if (seqLoadStatus[AudioLoad_GetRealTableIndex(SEQUENCE_TABLE, seqId)] == LOAD_STATUS_IN_PROGRESS) {
         return NULL;
     }
+    u8* ramAddr = AudioLoad_SyncLoad(SEQUENCE_TABLE, seqId, &didAllocate);
 
-    return AudioLoad_SyncLoad(SEQUENCE_TABLE, seqId, &didAllocate);
+    if (didAllocate) {
+        AudioApi_SequenceLoaded(seqId, ramAddr);
+    }
+    return ramAddr;
 }
 
 RECOMP_PATCH void AudioLoad_SetSeqLoadStatus(s32 seqId, s32 loadStatus) {

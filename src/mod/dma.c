@@ -1,28 +1,220 @@
 #include "global.h"
 #include "modding.h"
+#include "recompdata.h"
 
 /**
  * This file provides various DMA related functions. It is responsible for intercepting DMA requests
  * and returning chunks from mod memory.
  */
 
+#define MK_ASYNC_MSG(retData, tableType, id, loadStatus) \
+    (((retData) << 24) | ((tableType) << 16) | ((id) << 8) | (loadStatus))
+
+typedef enum {
+    LOAD_STATUS_WAITING,
+    LOAD_STATUS_START,
+    LOAD_STATUS_LOADING,
+    LOAD_STATUS_DONE
+} SlowLoadStatus;
+
+typedef struct {
+    u16 numInstruments;
+    u16 numDrums;
+    u16 numSfx;
+} UnloadedFonts;
+
 extern DmaHandler sDmaHandler;
 
-uintptr_t sDevAddr = 0;
-u8* sRamAddr = NULL;
-
-RECOMP_DECLARE_EVENT(AudioApi_AfterSyncDma(uintptr_t devAddr, u8* ramAddr));
+extern AudioTable* AudioLoad_GetLoadTable(s32 tableType);
+extern u32 AudioLoad_GetRealTableIndex(s32 tableType, u32 id);
+extern void* AudioLoad_AsyncLoadInner(s32 tableType, s32 id, s32 nChunks, s32 retData, OSMesgQueue* retQueue);
+extern void AudioLoad_FinishAsyncLoad(AudioAsyncLoad* asyncLoad);
+extern void AudioLoad_SyncDma(uintptr_t devAddr, u8* ramAddr, size_t size, s32 medium);
+extern void AudioLoad_SyncDmaUnkMedium(uintptr_t devAddr, u8* addr, size_t size, s32 unkMediumParam);
+extern void* AudioLoad_SearchCaches(s32 tableType, s32 id);
+extern void AudioLoad_SetSampleFontLoadStatusAndApplyCaches(s32 sampleBankId, s32 loadStatus);
 
 /**
- * Dispatch an event whenever a synchronous audio DMA request is completed
+ * Normally when data is loaded, it is stored in the audio heap's cache. On subsequent loads if the
+ * data is still cached, the AudioLoad_AsyncLoad and AudioLoad_SyncLoad functions will inform the
+ * caller that the data was not loaded again. This prevents certain functions from running multiple
+ * times on the same data. Since custom audio is always loaded, we just need to keep track if it has
+ * previously been requested by the game.
  */
-RECOMP_HOOK("AudioLoad_SyncDma") void AudioLoad_onSyncDma(uintptr_t devAddr, u8* ramAddr, size_t size, s32 medium) {
-    sDevAddr = devAddr;
-    sRamAddr = ramAddr;
+U32HashsetHandle fakeCache;
+
+bool AudioApi_FakeDidAllocate(s32 tableType, s32 realId) {
+    if (!fakeCache) {
+        fakeCache = recomputil_create_u32_hashset();
+    }
+    return recomputil_u32_hashset_insert(fakeCache, tableType << 8 | realId);
 }
 
-RECOMP_HOOK_RETURN("AudioLoad_SyncDma") void AudioLoad_afterSyncDma() {
-    AudioApi_AfterSyncDma(sDevAddr, sRamAddr);
+/**
+ * While intercepting AudioLoad_Dma works for loading custom audio data, it still takes up space on
+ * the audio heap and incurs multiple memcpy / osMesgQueue actions. Instead, we can intercept both
+ * AudioLoad_AsyncLoad and AudioLoad_SyncLoad and simply return the pointer to where it is in mod
+ * memory. The only audio data that this won't work with is samples, but those are not loaded using
+ * these functions.
+ *
+ * These patches should be able to be safely removed if it causes any problems, but my hope is that
+ * it may prevent BGM death since we don't have a limit placed on how many, or how large, custom
+ * soundfonts and sequences can be.
+ */
+RECOMP_PATCH void AudioLoad_AsyncLoad(s32 tableType, s32 id, s32 nChunks, s32 retData, OSMesgQueue* retQueue) {
+    AudioTable* table;
+    uintptr_t romAddr;
+    u32 realId;
+
+    table = AudioLoad_GetLoadTable(tableType);
+    realId = AudioLoad_GetRealTableIndex(tableType, id);
+    romAddr = table->entries[realId].romAddr;
+
+    // If a ROM address, call normal inner function
+    if (!IS_KSEG0(romAddr)) {
+        if (AudioLoad_AsyncLoadInner(tableType, id, nChunks, retData, retQueue) == NULL) {
+            osSendMesg(retQueue, (OSMesg)0xFFFFFFFF, OS_MESG_NOBLOCK);
+        }
+        return;
+    }
+
+    if (AudioApi_FakeDidAllocate(tableType, realId)) {
+        // If this is the first load, call the finish load function
+        AudioAsyncLoad asyncLoad = {0};
+
+        asyncLoad.status = LOAD_STATUS_DONE;
+        asyncLoad.ramAddr = (u8*)romAddr;
+        asyncLoad.retQueue = retQueue;
+        asyncLoad.retMsg = MK_ASYNC_MSG(retData, FONT_TABLE, realId, LOAD_STATUS_COMPLETE);
+
+        osCreateMesgQueue(&asyncLoad.msgQueue, &asyncLoad.msg, 1);
+        AudioLoad_FinishAsyncLoad(&asyncLoad);
+    } else {
+        // Otherwise send the os message immediately
+        osSendMesg(retQueue, (OSMesg)MK_ASYNC_MSG(retData, 0, 0, LOAD_STATUS_NOT_LOADED), OS_MESG_NOBLOCK);
+    }
+
+    switch (tableType) {
+    case SEQUENCE_TABLE:
+        AudioLoad_SetSeqLoadStatus(realId, LOAD_STATUS_COMPLETE);
+        break;
+    case FONT_TABLE:
+        AudioLoad_SetFontLoadStatus(realId, LOAD_STATUS_COMPLETE);
+        break;
+    case SAMPLE_TABLE:
+        AudioLoad_SetSampleFontLoadStatusAndApplyCaches(realId, LOAD_STATUS_COMPLETE);
+        break;
+    }
+}
+
+RECOMP_PATCH void* AudioLoad_SyncLoad(s32 tableType, u32 id, s32* didAllocate) {
+    size_t size;
+    AudioTable* table;
+    s32 medium2;
+    u32 medium;
+    s32 loadStatus;
+    uintptr_t romAddr;
+    s32 cachePolicy;
+    void* ramAddr;
+    u32 realId;
+    s32 mediumUnk = MEDIUM_UNK;
+
+    table = AudioLoad_GetLoadTable(tableType);
+    realId = AudioLoad_GetRealTableIndex(tableType, id);
+    romAddr = table->entries[realId].romAddr;
+    ramAddr = AudioLoad_SearchCaches(tableType, realId);
+
+    if (ramAddr != NULL) {
+        *didAllocate = false;
+        loadStatus = LOAD_STATUS_COMPLETE;
+    } else if (IS_KSEG0(romAddr)) {
+        // @mod if it's in memory already, just return the pointer
+        *didAllocate = AudioApi_FakeDidAllocate(tableType, realId);
+        loadStatus = LOAD_STATUS_COMPLETE;
+        ramAddr = (void*)romAddr;
+    } else {
+        size = table->entries[realId].size;
+        size = ALIGN16(size);
+        medium = table->entries[id].medium;
+        cachePolicy = table->entries[id].cachePolicy;
+        switch (cachePolicy) {
+            case CACHE_LOAD_PERMANENT:
+                //! @bug UB: triggers an UB because this function is missing a return value.
+                ramAddr = AudioHeap_AllocPermanent(tableType, realId, size);
+                if (ramAddr == NULL) {
+                    return ramAddr;
+                }
+                break;
+
+            case CACHE_LOAD_PERSISTENT:
+                ramAddr = AudioHeap_AllocCached(tableType, size, CACHE_PERSISTENT, realId);
+                if (ramAddr == NULL) {
+                    return ramAddr;
+                }
+                break;
+
+            case CACHE_LOAD_TEMPORARY:
+                ramAddr = AudioHeap_AllocCached(tableType, size, CACHE_TEMPORARY, realId);
+                if (ramAddr == NULL) {
+                    return ramAddr;
+                }
+                break;
+
+            case CACHE_LOAD_EITHER:
+            case CACHE_LOAD_EITHER_NOSYNC:
+                ramAddr = AudioHeap_AllocCached(tableType, size, CACHE_EITHER, realId);
+                if (ramAddr == NULL) {
+                    return ramAddr;
+                }
+                break;
+        }
+
+        *didAllocate = true;
+
+        medium2 = medium;
+        if (medium == MEDIUM_RAM_UNLOADED) {
+            if (romAddr == 0) {
+                return NULL;
+            }
+
+            if (tableType == FONT_TABLE) {
+                SoundFont* soundFont = &gAudioCtx.soundFontList[realId];
+
+                soundFont->numInstruments = ((UnloadedFonts*)romAddr)->numInstruments;
+                soundFont->numDrums = ((UnloadedFonts*)romAddr)->numDrums;
+                soundFont->numSfx = ((UnloadedFonts*)romAddr)->numSfx;
+                romAddr += 0x10;
+                size -= 0x10;
+            }
+
+            bcopy((void*)romAddr, ramAddr, size);
+        } else if (medium2 == mediumUnk) {
+            AudioLoad_SyncDmaUnkMedium(romAddr, ramAddr, size, (s16)table->header.unkMediumParam);
+        } else {
+            AudioLoad_SyncDma(romAddr, ramAddr, size, medium);
+        }
+
+        loadStatus = (cachePolicy == CACHE_LOAD_PERMANENT) ? LOAD_STATUS_PERMANENT : LOAD_STATUS_COMPLETE;
+    }
+
+    switch (tableType) {
+        case SEQUENCE_TABLE:
+            AudioLoad_SetSeqLoadStatus(realId, loadStatus);
+            break;
+
+        case FONT_TABLE:
+            AudioLoad_SetFontLoadStatus(realId, loadStatus);
+            break;
+
+        case SAMPLE_TABLE:
+            AudioLoad_SetSampleFontLoadStatusAndApplyCaches(realId, loadStatus);
+            break;
+
+        default:
+            break;
+    }
+
+    return ramAddr;
 }
 
 
@@ -32,9 +224,9 @@ RECOMP_HOOK_RETURN("AudioLoad_SyncDma") void AudioLoad_afterSyncDma() {
  */
 s32 AudioApi_Dma_Mod(OSIoMesg* mesg, u32 priority, s32 direction, uintptr_t devAddr, void* ramAddr,
                      size_t size, OSMesgQueue* reqQueue, s32 medium, const char* dmaFuncType) {
-      osSendMesg(reqQueue, NULL, OS_MESG_NOBLOCK);
-      Lib_MemCpy(ramAddr, (void*)devAddr, size);
-      return 0;
+    osSendMesg(reqQueue, NULL, OS_MESG_NOBLOCK);
+    Lib_MemCpy(ramAddr, (void*)devAddr, size);
+    return 0;
 }
 
 s32 AudioApi_Dma_Rom(OSIoMesg* mesg, u32 priority, s32 direction, uintptr_t devAddr, void* ramAddr,
@@ -180,8 +372,9 @@ RECOMP_PATCH void* AudioLoad_DmaSampleData(uintptr_t devAddr, size_t size, s32 a
     dma->ttl = 3;
     dma->devAddr = dmaDevAddr;
     dma->sizeUnused = transfer;
-    AudioLoad_Dma(&gAudioCtx.currAudioFrameDmaIoMesgBuf[gAudioCtx.curAudioFrameDmaCount++], OS_MESG_PRI_NORMAL, OS_READ,
-                  dmaDevAddr, dma->ramAddr, transfer, &gAudioCtx.curAudioFrameDmaQueue, medium, "SUPERDMA");
+    AudioLoad_Dma(&gAudioCtx.currAudioFrameDmaIoMesgBuf[gAudioCtx.curAudioFrameDmaCount++],
+                  OS_MESG_PRI_NORMAL, OS_READ, dmaDevAddr, dma->ramAddr, transfer,
+                  &gAudioCtx.curAudioFrameDmaQueue, medium, "SUPERDMA");
     *dmaIndexRef = dmaIndex;
     return (devAddr - dmaDevAddr) + dma->ramAddr;
 }
