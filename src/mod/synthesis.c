@@ -342,10 +342,18 @@ RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* samp
                         goto skip;
 
                     case CODEC_S16:
+                        AudioSynth_ClearBuffer(cmd++, DMEM_UNCOMPRESSED_NOTE,
+                                               (numSamplesToLoadAdj + SAMPLES_PER_FRAME) * SAMPLE_SIZE);
+
                         // @mod add support for PCM 16
-                        sampleDataChunkSize = ALIGN16(MIN(numSamplesToProcess, numSamplesUntilEnd) * SAMPLE_SIZE);
+                        // Note that despite being able to load the exact number of samples requested,
+                        // we load an extra 16 samples in order to prevent audio crackling.
+                        // These extra samples overlap the samples requested in the next update.
+                        sampleDataChunkSize =
+                            MIN(numSamplesToLoadAdj + SAMPLES_PER_FRAME, numSamplesUntilEnd) * SAMPLE_SIZE;
+                        sampleAddrOffset = synthState->samplePosInt * SAMPLE_SIZE;
                         samplesToLoadAddr =
-                            AudioLoad_DmaSampleData((uintptr_t)(sampleAddr + synthState->samplePosInt * SAMPLE_SIZE),
+                            AudioLoad_DmaSampleData((uintptr_t)(sampleAddr + sampleAddrOffset),
                                                     sampleDataChunkSize, flags,
                                                     &synthState->sampleDmaIndex, sample->medium);
 
