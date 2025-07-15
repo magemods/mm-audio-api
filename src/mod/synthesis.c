@@ -1,6 +1,7 @@
 #include "global.h"
 #include "modding.h"
 #include "recomputils.h"
+#include "util.h"
 
 /**
  * This file adds full support for playing PCM-16 (PCM signed 16-bit big-endian) files. Some support
@@ -38,11 +39,16 @@
 #define DMEM_WET_LEFT_CH 0xC70
 #define DMEM_WET_RIGHT_CH 0xE10 // = DMEM_WET_LEFT_CH + DMEM_1CH_SIZE
 
+// Maximum codebook entries for samples added via the API
+#define MAX_ADPCM_CODEBOOK_ENTRIES 64
+
 typedef enum {
     /* 0 */ HAAS_EFFECT_DELAY_NONE,
     /* 1 */ HAAS_EFFECT_DELAY_LEFT, // Delay left channel so that right channel is heard first
     /* 2 */ HAAS_EFFECT_DELAY_RIGHT // Delay right channel so that left channel is heard first
 } HaasEffectDelaySide;
+
+s16* adpcmCodeBookHeap;
 
 Acmd* AudioSynth_SaveResampledReverbSamplesImpl(Acmd* cmd, u16 dmem, u16 size, uintptr_t startAddr);
 Acmd* AudioSynth_LoadReverbSamplesImpl(Acmd* cmd, u16 dmem, u16 startPos, s32 size, SynthesisReverb* reverb);
@@ -73,6 +79,11 @@ void AudioSynth_LoadFilterBuffer(Acmd* cmd, s32 flags, s32 buf, s16* addr);
 void AudioSynth_DMemMove(Acmd* cmd, s32 dmemIn, s32 dmemOut, size_t size);
 void AudioSynth_SaveBuffer(Acmd* cmd, s32 dmemSrc, s32 size, void* addrDest);
 void AudioSynth_LoadFilterSize(Acmd* cmd, size_t size, s16* addr);
+
+RECOMP_HOOK_RETURN("AudioHeap_Init") void AudioHeap_Init(void) {
+    // Init some memory on the audio heap for moving mod defined adpcm codebooks
+    adpcmCodeBookHeap = AudioHeap_Alloc(&gAudioCtx.miscPool, MAX_ADPCM_CODEBOOK_ENTRIES * sizeof(s16));
+}
 
 __attribute__((optnone))
 RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* sampleState,
@@ -230,7 +241,15 @@ RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* samp
                     }
 
                     numEntries = SAMPLES_PER_FRAME * sample->book->header.order * sample->book->header.numPredictors;
-                    aLoadADPCM(cmd++, numEntries, gAudioCtx.adpcmCodeBook);
+
+                    // @mod RSP can't read from mod memory, so move the codebook if necessary
+                    if (IS_MOD_MEMORY(gAudioCtx.adpcmCodeBook)) {
+                        numEntries = MIN(numEntries, MAX_ADPCM_CODEBOOK_ENTRIES);
+                        Lib_MemCpy(adpcmCodeBookHeap, gAudioCtx.adpcmCodeBook, sizeof(s16) * numEntries);
+                        aLoadADPCM(cmd++, numEntries, adpcmCodeBookHeap);
+                    } else {
+                        aLoadADPCM(cmd++, numEntries, gAudioCtx.adpcmCodeBook);
+                    }
                 }
             }
 
