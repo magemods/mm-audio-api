@@ -37,6 +37,7 @@ typedef struct {
 } SampleBankRelocInfo;
 
 typedef enum {
+    AUDIOAPI_CMD_OP_REPLACE_SOUNDFONT,
     AUDIOAPI_CMD_OP_ADD_DRUM,
     AUDIOAPI_CMD_OP_REPLACE_DRUM,
     AUDIOAPI_CMD_OP_ADD_SOUNDEFFECT,
@@ -96,6 +97,36 @@ RECOMP_EXPORT s32 AudioApi_AddSoundFont(AudioTableEntry* entry) {
     gAudioCtx.soundFontTable->header.numEntries = newFontId + 1;
     gAudioCtx.soundFontTable->entries[newFontId] = *entry;
     return newFontId;
+}
+
+RECOMP_EXPORT void AudioApi_ReplaceSoundFont(s32 fontId, AudioTableEntry* entry) {
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_NOT_READY) {
+        return;
+    }
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING) {
+        AudioTableEntry* copy = recomp_alloc(sizeof(AudioTableEntry));
+        if (!copy) {
+            return;
+        }
+        *copy = *entry;
+        RecompQueue_PushIfNotQueued(soundFontInitQueue, AUDIOAPI_CMD_OP_REPLACE_SOUNDFONT,
+                                    fontId, 0, (void**)&copy);
+        return;
+    }
+    if (fontId >= gAudioCtx.soundFontTable->header.numEntries) {
+        return;
+    }
+    gAudioCtx.soundFontTable->entries[fontId] = *entry;
+}
+
+RECOMP_EXPORT void AudioApi_RestoreSoundFont(s32 fontId) {
+    if (gAudioApiInitPhase < AUDIOAPI_INIT_READY) {
+        return;
+    }
+    if (fontId >= gSoundFontTable.header.numEntries) {
+        return;
+    }
+    gAudioCtx.soundFontTable->entries[fontId] = gSoundFontTable.entries[fontId];
 }
 
 RECOMP_EXPORT s32 AudioApi_CreateEmptySoundFont() {
@@ -458,6 +489,12 @@ void AudioApi_SoundFontQueueDrain(RecompQueueCmd* cmd) {
     }
     AudioTableEntry* entry = &gAudioCtx.soundFontTable->entries[fontId];
 
+    if (cmd->op == AUDIOAPI_CMD_OP_REPLACE_SOUNDFONT) {
+        AudioApi_ReplaceSoundFont(cmd->arg0, (AudioTableEntry*) cmd->asPtr);
+        recomp_free(cmd->asPtr);
+        return;
+    }
+
     if (IS_KSEG0(entry->romAddr)) {
         // If the font is in memory (e.g. a CustomSoundFont), we can call the replace command now
         CustomSoundFont* soundFont = (CustomSoundFont*)entry->romAddr;
@@ -663,6 +700,9 @@ RECOMP_PATCH void AudioLoad_RelocateFont(s32 fontId, void* fontDataStartAddr, Sa
     gAudioCtx.soundFontList[fontId].drums = (Drum**)fontData[0];
     gAudioCtx.soundFontList[fontId].soundEffects = (SoundEffect*)fontData[1];
     gAudioCtx.soundFontList[fontId].instruments = (Instrument**)(&fontData[2]);
+
+    // Dispatch loaded event
+    AudioApi_SoundFontLoaded(fontId, (u8*)fontData);
 }
 
 RECOMP_PATCH void AudioLoad_RelocateSample(TunedSample* tunedSample, void* fontData, SampleBankRelocInfo* sampleBankReloc) {
