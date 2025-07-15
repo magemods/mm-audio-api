@@ -845,9 +845,8 @@ Drum* AudioApi_CopyDrum(Drum* src) {
     Drum* copy = recomp_alloc(sizeof(Drum));
     if (!copy) return NULL;
 
-
     Lib_MemCpy(copy, src, sizeof(Drum));
-    //copy->isRelocated = 1;
+    copy->isRelocated = true;
 
     if (src->tunedSample.sample) {
         copy->tunedSample.sample = AudioApi_CopySample(src->tunedSample.sample);
@@ -855,6 +854,7 @@ Drum* AudioApi_CopyDrum(Drum* src) {
             AudioApi_FreeDrum(copy);
             return NULL;
         }
+        copy->isRelocated &= copy->tunedSample.sample->isRelocated;
     }
 
     if (src->envelope) {
@@ -901,7 +901,7 @@ Instrument* AudioApi_CopyInstrument(Instrument* src) {
     if (!copy) return NULL;
 
     Lib_MemCpy(copy, src, sizeof(Instrument));
-    //copy->isRelocated = 1;
+    copy->isRelocated = true;
 
     if (src->envelope) {
         size_t envCount = 0;
@@ -924,6 +924,7 @@ Instrument* AudioApi_CopyInstrument(Instrument* src) {
             AudioApi_FreeInstrument(copy);
             return NULL;
         }
+        copy->isRelocated &= copy->lowPitchTunedSample.sample->isRelocated;
     }
 
     if (src->normalPitchTunedSample.sample) {
@@ -932,6 +933,7 @@ Instrument* AudioApi_CopyInstrument(Instrument* src) {
             AudioApi_FreeInstrument(copy);
             return NULL;
         }
+        copy->isRelocated &= copy->normalPitchTunedSample.sample->isRelocated;
     }
 
     if (src->highPitchTunedSample.sample) {
@@ -940,6 +942,7 @@ Instrument* AudioApi_CopyInstrument(Instrument* src) {
             AudioApi_FreeInstrument(copy);
             return NULL;
         }
+        copy->isRelocated &= copy->highPitchTunedSample.sample->isRelocated;
     }
 
     return copy;
@@ -971,7 +974,10 @@ Sample* AudioApi_CopySample(Sample* src) {
 
     Fnv32_t hval;
     uintptr_t dupe;
-    if (src->unk_bit26) {
+    // If this is a sample from a vanilla sample bank, and the preload flag (unk_bit26) is true,
+    // we want to return an existing copy of this sample if it exists. That is because preloaded
+    // samples will be allocated on the audio heap, and we don't want to have duplicates.
+    if (src->unk_bit26 && !IS_MOD_MEMORY(src->sampleAddr)) {
         hval = AudioApi_HashSample(src);
         if (recomputil_u32_value_hashmap_get(sampleHashmap, hval, &dupe)) {
             refcounter_inc((void*)dupe);
@@ -983,8 +989,15 @@ Sample* AudioApi_CopySample(Sample* src) {
     if (!copy) return NULL;
 
     Lib_MemCpy(copy, src, sizeof(Sample));
-    //copy->medium = MEDIUM_CART;
-    //copy->isRelocated = 1;
+
+    if (IS_MOD_MEMORY(copy->sampleAddr)) {
+        // Custom samples are always medium cart, never preloaded, and already relocated
+        copy->medium = MEDIUM_CART;
+        src->unk_bit26 = false;
+        copy->isRelocated = true;
+    } else {
+        copy->isRelocated = false;
+    }
 
     if (src->loop) {
         // s16 predictorState[16] only exists if count != 0.
@@ -1011,6 +1024,7 @@ Sample* AudioApi_CopySample(Sample* src) {
         Lib_MemCpy(copy->book, src->book, bookSize);
     }
 
+    // If this sample has the preload flag, store a reference to it and increment the ref counter
     if (src->unk_bit26) {
         refcounter_inc(copy);
         recomputil_u32_value_hashmap_insert(sampleHashmap, hval, (uintptr_t)copy);
