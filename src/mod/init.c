@@ -1,16 +1,16 @@
 #include "init.h"
 #include "modding.h"
 #include "recomputils.h"
+#include "heap.h"
+#include "load.h"
 #include "queue.h"
 
 /**
  * This file is responsible for the main Audio API init process. It patches `AudioLoad_Init()`
  * in order to dispactch events at the correct time both internally and for client mods.
  *
- * Init status is tracked through `gAudioApiInitPhase`, which will code to accept or queue commands.
+ * Init status is tracked through `gAudioApiInitPhase`, which will signal to accept or queue commands.
  */
-
-extern u8 gAudioHeap[0x138000];
 
 extern void AudioLoad_InitTable(AudioTable* table, uintptr_t romAddr, u16 unkMediumParam);
 extern void AudioLoad_InitSoundFont(s32 fontId);
@@ -85,8 +85,8 @@ RECOMP_PATCH void AudioLoad_Init(void* heap, size_t heapSize) {
     gAudioCtx.rspTask[1].task.t.data_size = 0;
 
     osCreateMesgQueue(&gAudioCtx.syncDmaQueue, &gAudioCtx.syncDmaMesg, 1);
-    osCreateMesgQueue(&gAudioCtx.curAudioFrameDmaQueue, gAudioCtx.currAudioFrameDmaMesgBuf,
-                      ARRAY_COUNT(gAudioCtx.currAudioFrameDmaMesgBuf));
+    osCreateMesgQueue(&gAudioCtx.curAudioFrameDmaQueue, currAudioFrameDmaMesgBuf,
+                      ARRAY_COUNT(currAudioFrameDmaMesgBuf));
     osCreateMesgQueue(&gAudioCtx.externalLoadQueue, gAudioCtx.externalLoadMesgBuf,
                       ARRAY_COUNT(gAudioCtx.externalLoadMesgBuf));
     osCreateMesgQueue(&gAudioCtx.preloadSampleQueue, gAudioCtx.preloadSampleMesgBuf,
@@ -108,6 +108,9 @@ RECOMP_PATCH void AudioLoad_Init(void* heap, size_t heapSize) {
     for (i = 0; i < ((s32)gAudioCtx.audioHeapSize / (s32)sizeof(u64)); i++) {
         ((u64*)gAudioCtx.audioHeap)[i] = 0;
     }
+
+    // @mod We only need to store the ai buffer here
+    gAudioHeapInitSizes.initPoolSize = AIBUF_SIZE * ARRAY_COUNT(gAudioCtx.aiBuffers) + 0x100;
 
     // Main Pool Split (split entirety of audio heap into initPool and sessionPool)
     AudioHeap_InitMainPool(gAudioHeapInitSizes.initPoolSize);
@@ -150,17 +153,12 @@ RECOMP_PATCH void AudioLoad_Init(void* heap, size_t heapSize) {
     AudioHeap_ResetStep();
 
     numFonts = gAudioCtx.soundFontTable->header.numEntries;
-    gAudioCtx.soundFontList = AudioHeap_Alloc(&gAudioCtx.initPool, numFonts * sizeof(SoundFont));
+    gAudioCtx.soundFontList = recomp_alloc(numFonts * sizeof(SoundFont));
 
     for (i = 0; i < numFonts; i++) {
         AudioLoad_InitSoundFont(i);
     }
 
-    if (addr = AudioHeap_Alloc(&gAudioCtx.initPool, gAudioHeapInitSizes.permanentPoolSize), addr == NULL) {
-        gAudioHeapInitSizes.permanentPoolSize = 0;
-    }
-
-    AudioHeap_InitPool(&gAudioCtx.permanentPool, addr, gAudioHeapInitSizes.permanentPoolSize);
     gAudioCtxInitialized = true;
     osSendMesg(gAudioCtx.taskStartQueueP, (void*)gAudioCtx.totalTaskCount, OS_MESG_NOBLOCK);
 }

@@ -1,6 +1,6 @@
 #include "global.h"
 #include "modding.h"
-#include "recomputils.h"
+#include "heap.h"
 #include "util.h"
 
 /**
@@ -20,7 +20,7 @@
  * ffmpeg
  * ======
  * Use a command similar to this:
- *   ffmpeg -i input.wav -acodec pcm_s16be -f s16be -ac 1 -ar 16000 my-sample.raw
+ *   ffmpeg -i input.wav -acodec pcm_s16be -f s16be -ac 1 -ar 32000 my-sample.raw
  *
  */
 
@@ -39,16 +39,11 @@
 #define DMEM_WET_LEFT_CH 0xC70
 #define DMEM_WET_RIGHT_CH 0xE10 // = DMEM_WET_LEFT_CH + DMEM_1CH_SIZE
 
-// Maximum codebook entries for samples added via the API
-#define MAX_ADPCM_CODEBOOK_ENTRIES 64
-
 typedef enum {
     /* 0 */ HAAS_EFFECT_DELAY_NONE,
     /* 1 */ HAAS_EFFECT_DELAY_LEFT, // Delay left channel so that right channel is heard first
     /* 2 */ HAAS_EFFECT_DELAY_RIGHT // Delay right channel so that left channel is heard first
 } HaasEffectDelaySide;
-
-s16* adpcmCodeBookHeap;
 
 Acmd* AudioSynth_SaveResampledReverbSamplesImpl(Acmd* cmd, u16 dmem, u16 size, uintptr_t startAddr);
 Acmd* AudioSynth_LoadReverbSamplesImpl(Acmd* cmd, u16 dmem, u16 startPos, s32 size, SynthesisReverb* reverb);
@@ -80,10 +75,6 @@ void AudioSynth_DMemMove(Acmd* cmd, s32 dmemIn, s32 dmemOut, size_t size);
 void AudioSynth_SaveBuffer(Acmd* cmd, s32 dmemSrc, s32 size, void* addrDest);
 void AudioSynth_LoadFilterSize(Acmd* cmd, size_t size, s16* addr);
 
-RECOMP_HOOK_RETURN("AudioHeap_Init") void AudioHeap_Init(void) {
-    // Init some memory on the audio heap for moving mod defined adpcm codebooks
-    adpcmCodeBookHeap = AudioHeap_Alloc(&gAudioCtx.miscPool, MAX_ADPCM_CODEBOOK_ENTRIES * sizeof(s16));
-}
 
 __attribute__((optnone))
 RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* sampleState,
@@ -224,32 +215,24 @@ RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* samp
             }
 
             // Load the ADPCM codeBook
+            // @mod RSP can't read from mod memory, so move codebook into audio heap
             if ((sample->codec == CODEC_ADPCM) || (sample->codec == CODEC_SMALL_ADPCM)) {
                 if (gAudioCtx.adpcmCodeBook != sample->book->codeBook) {
-                    u32 numEntries;
+                    s16* codeBook;
+                    u32 numEntries = SAMPLES_PER_FRAME * sample->book->header.order *
+                        sample->book->header.numPredictors;
 
-                    switch (bookOffset) {
-                        case 1:
-                            gAudioCtx.adpcmCodeBook = &gInvalidAdpcmCodeBook[1];
-                            break;
-
-                        case 2:
-                        case 3:
-                        default:
-                            gAudioCtx.adpcmCodeBook = sample->book->codeBook;
-                            break;
-                    }
-
-                    numEntries = SAMPLES_PER_FRAME * sample->book->header.order * sample->book->header.numPredictors;
-
-                    // @mod RSP can't read from mod memory, so move the codebook if necessary
-                    if (IS_MOD_MEMORY(gAudioCtx.adpcmCodeBook)) {
-                        numEntries = MIN(numEntries, MAX_ADPCM_CODEBOOK_ENTRIES);
-                        Lib_MemCpy(adpcmCodeBookHeap, gAudioCtx.adpcmCodeBook, sizeof(s16) * numEntries);
-                        aLoadADPCM(cmd++, numEntries, adpcmCodeBookHeap);
+                    if (bookOffset == 1) {
+                        gAudioCtx.adpcmCodeBook = &gInvalidAdpcmCodeBook[1];
+                        codeBook = gAudioCtx.adpcmCodeBook;
                     } else {
-                        aLoadADPCM(cmd++, numEntries, gAudioCtx.adpcmCodeBook);
+                        gAudioCtx.adpcmCodeBook = sample->book->codeBook;
+                        codeBook = IS_MOD_MEMORY(gAudioCtx.adpcmCodeBook)
+                            ? AudioApi_RspCacheMemcpy(gAudioCtx.adpcmCodeBook, sizeof(s16) * numEntries)
+                            : gAudioCtx.adpcmCodeBook;
                     }
+
+                    aLoadADPCM(cmd++, numEntries, codeBook);
                 }
             }
 
@@ -430,7 +413,10 @@ RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* samp
                 }
 
                 if (synthState->atLoopPoint) {
-                    aSetLoop(cmd++, sample->loop->predictorState);
+                    // @mod RSP can't read from mod memory, so move loop into audio heap
+                    aSetLoop(cmd++, IS_MOD_MEMORY(sample->loop->predictorState)
+                             ? AudioApi_RspCacheMemcpy(sample->loop->predictorState, sizeof(s16) * 16)
+                             : sample->loop->predictorState);
                     flags = A_LOOP;
                     synthState->atLoopPoint = false;
                 }
@@ -666,4 +652,12 @@ RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* samp
     }
 
     return cmd;
+}
+
+RECOMP_PATCH void AudioSynth_LoadFilterSize(Acmd* cmd, size_t size, s16* addr) {
+    // @mod RSP can't read from mod memory, so move filter into audio heap
+    if (IS_MOD_MEMORY(addr)) {
+        addr = AudioApi_RspCacheMemcpy(addr, size);
+    }
+    aFilter(cmd, 2, size, addr);
 }

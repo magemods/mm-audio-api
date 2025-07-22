@@ -5,6 +5,7 @@
 
 #define SIZE_8MB 0x800000
 #define IS_MOD_MEMORY(x) (U32(x) >= K0BASE + SIZE_8MB)
+#define IS_RECOMP_ALLOC(x) (U32(x) >= 0x81000000)
 
 #define FNV1_32_INIT ((Fnv32_t)0x811c9dc5)
 #define FNV1_32A_INIT FNV1_32_INIT
