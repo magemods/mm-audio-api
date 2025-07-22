@@ -3,6 +3,8 @@
 #include "recomputils.h"
 #include "init.h"
 #include "sequence_functions.h"
+#include "heap.h"
+#include "load.h"
 #include "queue.h"
 #include "util.h"
 
@@ -37,7 +39,6 @@ typedef enum {
 
 RecompQueue* sequenceQueue;
 u16 sequenceTableCapacity = NA_BGM_MAX;
-u8* sExtSeqLoadStatus = gAudioCtx.seqLoadStatus;
 
 void AudioApi_SequenceQueueDrain(RecompQueueCmd* cmd);
 bool AudioApi_GrowSequenceTables();
@@ -130,8 +131,13 @@ RECOMP_EXPORT s32 AudioApi_AddSequenceFont(s32 seqId, s32 fontId) {
     if (numFonts == MAX_FONTS_PER_SEQUENCE) {
         return -1;
     }
+
+    for (s32 i = MAX_FONTS_PER_SEQUENCE; i > 1; i--) {
+        entry[i] = entry[i - 1];
+    }
+    entry[1] = fontId;
     entry[0]++;
-    entry[numFonts + 1] = fontId;
+
     return numFonts + 1;
 }
 
@@ -151,10 +157,10 @@ RECOMP_EXPORT void AudioApi_ReplaceSequenceFont(s32 seqId, s32 fontNum, s32 font
     u8* entry = &gAudioCtx.sequenceFontTable[index];
     u8 numFonts = entry[0];
 
-    if (fontNum >= numFonts) {
+    if (fontNum >= numFonts || fontNum < 0) {
         return;
     }
-    entry[fontNum + 1] = fontId;
+    entry[numFonts - fontNum] = fontId;
 }
 
 RECOMP_EXPORT void AudioApi_RestoreSequenceFont(s32 seqId, s32 fontNum) {
@@ -226,6 +232,21 @@ void AudioApi_SequenceQueueDrain(RecompQueueCmd* cmd) {
     }
 }
 
+RECOMP_CALLBACK(".", AudioApi_SequenceLoadedInternal) void AudioApi_RelocateSequence(s32 seqId, void** ramAddrPtr) {
+    // If this sequence was just loaded into the audio heap load buffer, we need to relocate it
+    // to mod memory now.
+    if (IS_AUDIO_HEAP_MEMORY(*ramAddrPtr)) {
+        size_t size = gAudioCtx.sequenceTable->entries[seqId].size;
+        void* ramAddr = recomp_alloc(size);
+        Lib_MemCpy(ramAddr, *ramAddrPtr, size);
+        gAudioCtx.sequenceTable->entries[seqId].romAddr = (uintptr_t)ramAddr;
+        *ramAddrPtr = ramAddr;
+    }
+
+    // Dispatch loaded event
+    AudioApi_SequenceLoaded(seqId, (u8*)(*ramAddrPtr));
+}
+
 bool AudioApi_GrowSequenceTables() {
     u16 oldCapacity = sequenceTableCapacity;
     u16 newCapacity = sequenceTableCapacity << 1;
@@ -272,10 +293,10 @@ bool AudioApi_GrowSequenceTables() {
     Lib_MemCpy(newSeqLoadStatus, sExtSeqLoadStatus, oldSize);
 
     // Free old tables
-    if (IS_MOD_MEMORY(gAudioCtx.sequenceTable)) recomp_free(gAudioCtx.sequenceTable);
-    if (IS_MOD_MEMORY(gAudioCtx.sequenceFontTable)) recomp_free(gAudioCtx.sequenceFontTable);
-    if (IS_MOD_MEMORY(sExtSeqFlags)) recomp_free(sExtSeqFlags);
-    if (IS_MOD_MEMORY(sExtSeqLoadStatus)) recomp_free(sExtSeqLoadStatus);
+    if (IS_RECOMP_ALLOC(gAudioCtx.sequenceTable)) recomp_free(gAudioCtx.sequenceTable);
+    if (IS_RECOMP_ALLOC(gAudioCtx.sequenceFontTable)) recomp_free(gAudioCtx.sequenceFontTable);
+    if (IS_RECOMP_ALLOC(sExtSeqFlags)) recomp_free(sExtSeqFlags);
+    if (IS_RECOMP_ALLOC(sExtSeqLoadStatus)) recomp_free(sExtSeqLoadStatus);
 
     // Store new tables
     recomp_printf("AudioApi: Resized sequences tables to %d\n", newCapacity);
@@ -339,42 +360,4 @@ u8* AudioApi_RebuildSequenceFontTable(u16 oldCapacity, u16 newCapacity) {
     }
 
     return newSeqFontTable;
-}
-
-// gAudioCtx.seqLoadStatus has 128 max entries, so anything higher will read/write from our own array
-
-RECOMP_PATCH u8* AudioLoad_SyncLoadSeq(s32 seqId) {
-    u8* seqLoadStatus = seqId < 0x80 ? gAudioCtx.seqLoadStatus : sExtSeqLoadStatus;
-    s32 pad;
-    s32 didAllocate;
-
-    if (seqLoadStatus[AudioLoad_GetRealTableIndex(SEQUENCE_TABLE, seqId)] == LOAD_STATUS_IN_PROGRESS) {
-        return NULL;
-    }
-    u8* ramAddr = AudioLoad_SyncLoad(SEQUENCE_TABLE, seqId, &didAllocate);
-
-    if (didAllocate) {
-        AudioApi_SequenceLoaded(seqId, ramAddr);
-    }
-    return ramAddr;
-}
-
-RECOMP_PATCH void AudioLoad_SetSeqLoadStatus(s32 seqId, s32 loadStatus) {
-    u8* seqLoadStatus = seqId < 0x80 ? gAudioCtx.seqLoadStatus : sExtSeqLoadStatus;
-    if ((seqId != 0xFF) && (seqLoadStatus[seqId] != LOAD_STATUS_PERMANENT)) {
-        seqLoadStatus[seqId] = loadStatus;
-    }
-}
-
-RECOMP_PATCH s32 AudioLoad_IsSeqLoadComplete(s32 seqId) {
-    u8* seqLoadStatus = seqId < 0x80 ? gAudioCtx.seqLoadStatus : sExtSeqLoadStatus;
-    if (seqId == 0xFF) {
-        return true;
-    } else if (seqLoadStatus[seqId] >= LOAD_STATUS_COMPLETE) {
-        return true;
-    } else if (seqLoadStatus[AudioLoad_GetRealTableIndex(SEQUENCE_TABLE, seqId)] >= LOAD_STATUS_COMPLETE) {
-        return true;
-    } else {
-        return false;
-    }
 }

@@ -36,6 +36,7 @@ void* AudioLoad_SyncLoadFont(u32 fontId);
 u8* AudioLoad_SyncLoadSeq(s32 seqId);
 u32 AudioLoad_GetRealTableIndex(s32 tableType, u32 id);
 
+
 RECOMP_EXPORT void AudioApi_SetSeqPlayerSeqId(SequencePlayer* seqPlayer, s32 seqId) {
     sExtSeqPlayersSeqId[seqPlayer->playerIndex] = seqId;
     seqPlayer->seqId = seqId < 0x100 ? seqId : NA_BGM_UNKNOWN;
@@ -57,7 +58,6 @@ RECOMP_PATCH s32 AudioLoad_SyncInitSeqPlayerInternal(s32 playerIndex, s32 seqId,
 
     AudioScript_SequencePlayerDisable(seqPlayer);
 
-    if (1) {}
     fontId = 0xFF;
     index = ((u16*)gAudioCtx.sequenceFontTable)[seqId];
     numFonts = gAudioCtx.sequenceFontTable[index++];
@@ -106,6 +106,7 @@ RECOMP_PATCH void AudioScript_SequencePlayerDisable(SequencePlayer* seqPlayer) {
     seqPlayer->enabled = false;
     seqPlayer->finished = true;
 
+    // @mod Use our seqId getter function
     s32 seqId = AudioApi_GetSeqPlayerSeqId(seqPlayer);
     if (AudioLoad_IsSeqLoadComplete(seqId)) {
         AudioLoad_SetSeqLoadStatus(seqId, LOAD_STATUS_DISCARDABLE);
@@ -119,6 +120,15 @@ RECOMP_PATCH void AudioScript_SequencePlayerDisable(SequencePlayer* seqPlayer) {
         gAudioCtx.fontCache.temporary.nextSide = 1;
     } else if (seqPlayer->defaultFont == gAudioCtx.fontCache.temporary.entries[1].id) {
         gAudioCtx.fontCache.temporary.nextSide = 0;
+    }
+}
+
+RECOMP_PATCH void AudioHeap_DiscardSequence(s32 seqId) {
+    // @mod Use our seqId getter function
+    for (s32 i = 0; i < gAudioCtx.audioBufferParameters.numSequencePlayers; i++) {
+        if (gAudioCtx.seqPlayers[i].enabled && AudioApi_GetSeqPlayerSeqId(&gAudioCtx.seqPlayers[i]) == seqId) {
+            AudioScript_SequencePlayerDisable(&gAudioCtx.seqPlayers[i]);
+        }
     }
 }
 

@@ -100,7 +100,7 @@ void AudioApi_ProcessSeqCmd(RecompQueueCmd* cmd) {
             } else {
                 // Store the cmd to be called again once the fonts are loaded
                 // but changes the command so that next time, the (seqArgs < 0x80) case is taken
-                cmd->arg0 = ((seqArgs << 8) & ~(SEQ_FLAG_ASYNC | SEQCMD_ASYNC_ACTIVE)) + SEQCMD_ASYNC_ACTIVE;
+                cmd->arg0 = (cmd->arg0 & ~(SEQ_FLAG_ASYNC | SEQCMD_ASYNC_ACTIVE)) + SEQCMD_ASYNC_ACTIVE;
                 gExtActiveSeqs[seqPlayerIndex].startAsyncSeqCmd = *cmd;
 
                 gActiveSeqs[seqPlayerIndex].isWaitingForFonts = true;

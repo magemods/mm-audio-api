@@ -184,6 +184,7 @@ RECOMP_PATCH void AudioSeq_StopSequence(u8 seqPlayerIndex, u16 fadeOutDuration) 
     fadeOutDuration = (fadeOutDuration * (u16)gAudioCtx.audioBufferParameters.updatesPerFrame) / 4;
     AUDIOCMD_GLOBAL_DISABLE_SEQPLAYER(seqPlayerIndex, fadeOutDuration);
     gExtActiveSeqs[seqPlayerIndex].seqId = NA_BGM_DISABLED;
+    gExtActiveSeqs[seqPlayerIndex].seqArgs = 0x0000;
 }
 
 RECOMP_EXPORT s32 AudioApi_GetActiveSeqId(u8 seqPlayerIndex) {
@@ -1074,9 +1075,9 @@ RECOMP_PATCH void AudioSeq_ResetActiveSequences(void) {
         sNumSeqRequests[seqPlayerIndex] = 0;
 
         gExtActiveSeqs[seqPlayerIndex].seqId = NA_BGM_DISABLED;
-        gExtActiveSeqs[seqPlayerIndex].seqArgs = 0;
+        gExtActiveSeqs[seqPlayerIndex].seqArgs = 0x0000;
         gExtActiveSeqs[seqPlayerIndex].prevSeqId = NA_BGM_DISABLED;
-        gExtActiveSeqs[seqPlayerIndex].prevSeqArgs = 0;
+        gExtActiveSeqs[seqPlayerIndex].prevSeqArgs = 0x0000;
         gActiveSeqs[seqPlayerIndex].tempoTimer = 0;
         gActiveSeqs[seqPlayerIndex].tempoOriginal = 0;
         gActiveSeqs[seqPlayerIndex].tempoCmd = 0;
