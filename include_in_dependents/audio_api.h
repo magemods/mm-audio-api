@@ -27,6 +27,14 @@ RECOMP_IMPORT("magemods_audio_api", u8 AudioApi_GetSequenceFlags(s32 seqId));
 RECOMP_IMPORT("magemods_audio_api", void AudioApi_SetSequenceFlags(s32 seqId, u8 flags));
 RECOMP_IMPORT("magemods_audio_api", void AudioApi_RestoreSequenceFlags(s32 seqId));
 
+RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_AddSoundFont(AudioTableEntry* entry));
+RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_ReplaceSoundFont(s32 fontId, AudioTableEntry* entry));
+RECOMP_IMPORT("magemods_audio_api", void AudioApi_RestoreSoundFont(s32 fontId));
+RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_CreateEmptySoundFont());
+
+RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_AddInstrument(s32 fontId, Instrument* instrument));
+RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_AddDrum(s32 fontId, Drum* drum));
+RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_AddSoundEffect(s32 fontId, SoundEffect* sfx));
 RECOMP_IMPORT("magemods_audio_api", void AudioApi_ReplaceDrum(s32 fontId, s32 drumId, Drum* drum));
 RECOMP_IMPORT("magemods_audio_api", void AudioApi_ReplaceSoundEffect(s32 fontId, s32 sfxId, SoundEffect* sfx));
 RECOMP_IMPORT("magemods_audio_api", void AudioApi_ReplaceInstrument(s32 fontId, s32 instId, Instrument* instrument));
