@@ -687,6 +687,7 @@ bool AudioApi_GrowSoundFontTable() {
     // Store new table
     recomp_printf("AudioApi: Resized soundfont table to %d\n", newCapacity);
     gAudioCtx.soundFontTable = newSoundFontTable;
+    soundFontTableCapacity = newCapacity;
     return true;
 
  cleanup:
