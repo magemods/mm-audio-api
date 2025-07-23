@@ -104,11 +104,14 @@ RECOMP_IMPORT("magemods_audio_api", bool cseq_fontinstr(CSeqSection* section, u8
 RECOMP_IMPORT("magemods_audio_api", bool cseq_noshort(CSeqSection* section));
 RECOMP_IMPORT("magemods_audio_api", bool cseq_short(CSeqSection* section));
 RECOMP_IMPORT("magemods_audio_api", bool cseq_ldlayer(CSeqSection* channel, u8 layerNum, CSeqSection* layer));
+RECOMP_IMPORT("magemods_audio_api", bool cseq_pan(CSeqSection* section, u8 pan));
+RECOMP_IMPORT("magemods_audio_api", bool cseq_panweight(CSeqSection* section, u8 weight));
 
 // Layer commands
 RECOMP_IMPORT("magemods_audio_api", bool cseq_ldelay(CSeqSection* section, u16 delay));
 RECOMP_IMPORT("magemods_audio_api", bool cseq_notedvg(CSeqSection* section, u8 pitch, u16 delay, u8 velocity, u8 gateTime));
 RECOMP_IMPORT("magemods_audio_api", bool cseq_notedv(CSeqSection* section, u8 pitch, u16 delay, u8 velocity));
 RECOMP_IMPORT("magemods_audio_api", bool cseq_notevg(CSeqSection* section, u8 pitch, u8 velocity, u8 gateTime));
+RECOMP_IMPORT("magemods_audio_api", bool cseq_notepan(CSeqSection* section, u8 pan));
 
 #endif

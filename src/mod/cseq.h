@@ -97,13 +97,19 @@ bool cseq_freechan(CSeqSection* sequence, u16 bitmask);
 bool cseq_tempo(CSeqSection* sequence, u8 bpm);
 
 // Channel commands
+bool cseq_font(CSeqSection* section, u8 fontId);
+bool cseq_fontinstr(CSeqSection* section, u8 fontId, u8 instId);
 bool cseq_noshort(CSeqSection* section);
 bool cseq_short(CSeqSection* section);
 bool cseq_ldlayer(CSeqSection* channel, u8 layerNum, CSeqSection* layer);
+bool cseq_pan(CSeqSection* section, u8 pan);
+bool cseq_panweight(CSeqSection* section, u8 weight);
 
 // Layer commands
+bool cseq_ldelay(CSeqSection* section, u16 delay);
 bool cseq_notedvg(CSeqSection* section, u8 pitch, u16 delay, u8 velocity, u8 gateTime);
 bool cseq_notedv(CSeqSection* section, u8 pitch, u16 delay, u8 velocity);
 bool cseq_notevg(CSeqSection* section, u8 pitch, u8 velocity, u8 gateTime);
+bool cseq_notepan(CSeqSection* section, u8 pan);
 
 #endif

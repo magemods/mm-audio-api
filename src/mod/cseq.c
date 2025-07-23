@@ -391,6 +391,21 @@ RECOMP_EXPORT bool cseq_ldlayer(CSeqSection* channel, u8 layerNum, CSeqSection* 
         && cseq_buffer_write_u16(channel->buffer, 0x0000);
 }
 
+RECOMP_EXPORT bool cseq_pan(CSeqSection* section, u8 pan) {
+    if (!section || section->ended) return false;
+    if (section->type != CSEQ_SECTION_CHANNEL) return false;
+    return cseq_buffer_write_u8(section->buffer, ASEQ_OP_CHAN_PAN)
+        && cseq_buffer_write_u8(section->buffer, pan);
+}
+
+RECOMP_EXPORT bool cseq_panweight(CSeqSection* section, u8 weight) {
+    if (!section || section->ended) return false;
+    if (section->type != CSEQ_SECTION_CHANNEL) return false;
+    return cseq_buffer_write_u8(section->buffer, ASEQ_OP_CHAN_PANWEIGHT)
+        && cseq_buffer_write_u8(section->buffer, weight);
+}
+
+
 // Layer commands
 
 RECOMP_EXPORT bool cseq_ldelay(CSeqSection* section, u16 delay) {
@@ -423,4 +438,11 @@ RECOMP_EXPORT bool cseq_notevg(CSeqSection* section, u8 pitch, u8 velocity, u8 g
     return cseq_buffer_write_u8(section->buffer, ASEQ_OP_LAYER_NOTEVG | (pitch & 0x3F))
         && cseq_buffer_write_u8(section->buffer, velocity)
         && cseq_buffer_write_u8(section->buffer, gateTime);
+}
+
+RECOMP_EXPORT bool cseq_notepan(CSeqSection* section, u8 pan) {
+    if (!section || section->ended) return false;
+    if (section->type != CSEQ_SECTION_LAYER) return false;
+    return cseq_buffer_write_u8(section->buffer, ASEQ_OP_LAYER_NOTEPAN)
+        && cseq_buffer_write_u8(section->buffer, pan);
 }
