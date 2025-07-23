@@ -72,12 +72,14 @@ bool cseq_buffer_write_var(CSeqBuffer* buf, u16 val) {
 void cseq_buffer_destroy(CSeqBuffer* buf) {
     if (!buf) return;
     if (buf->data) recomp_free(buf->data);
+    recomp_free(buf);
 }
 
 // ======== CONTAINER FUNCTIONS ========
 
 RECOMP_EXPORT CSeqContainer* cseq_create() {
     CSeqContainer* root = recomp_alloc(sizeof(CSeqContainer));
+    if (!root) return NULL;
 
     root->buffer = cseq_buffer_create(CSEQ_DEFAULT_SEQUENCE_BUFFER_SIZE);
     if (!root->buffer) {
@@ -101,22 +103,19 @@ RECOMP_EXPORT CSeqContainer* cseq_create() {
     return root;
 
  cleanup:
-    if (root->buffer) recomp_free(root->buffer);
-    if (root->sections) recomp_free(root->sections);
-    if (root->patches) recomp_free(root->patches);
-
+    cseq_destroy(root);
     return NULL;
 }
 
 RECOMP_EXPORT void cseq_destroy(CSeqContainer* root) {
     if (!root) return;
-
     for (size_t i = 0; i < root->section_count; i++) {
         cseq_section_destroy(&root->sections[i]);
     }
-    if (root->buffer) recomp_free(root->buffer);
+    if (root->buffer) cseq_buffer_destroy(root->buffer);
     if (root->sections) recomp_free(root->sections);
     if (root->patches) recomp_free(root->patches);
+    recomp_free(root);
 }
 
 bool cseq_add_offset_patch(CSeqContainer* root, CSeqSection* source, CSeqSection* target,
@@ -220,6 +219,7 @@ RECOMP_EXPORT CSeqSection* cseq_layer_create(CSeqContainer* root) {
 RECOMP_EXPORT CSeqSection* cseq_label_create(CSeqSection* section) {
     if (!section || section->ended) return NULL;
     CSeqSection* label = cseq_section_create(section->root, CSEQ_SECTION_LABEL);
+    if (!label) return NULL;
     label->label_target_section = section;
     label->offset = section->buffer->size;
     label->ended = true;
@@ -233,7 +233,7 @@ RECOMP_EXPORT bool cseq_section_end(CSeqSection* section) {
 }
 
 RECOMP_EXPORT void cseq_section_destroy(CSeqSection* section) {
-    if (section->type == CSEQ_SECTION_LABEL) return;
+    if (!section || section->type == CSEQ_SECTION_LABEL) return;
     cseq_buffer_destroy(section->buffer);
 }
 
@@ -356,6 +356,21 @@ RECOMP_EXPORT bool cseq_tempo(CSeqSection* sequence, u8 bpm) {
 
 // Channel commands
 
+RECOMP_EXPORT bool cseq_font(CSeqSection* section, u8 fontId) {
+    if (!section || section->ended) return false;
+    if (section->type != CSEQ_SECTION_CHANNEL) return false;
+    return cseq_buffer_write_u8(section->buffer, ASEQ_OP_CHAN_FONT)
+        && cseq_buffer_write_u8(section->buffer, fontId);
+}
+
+RECOMP_EXPORT bool cseq_fontinstr(CSeqSection* section, u8 fontId, u8 instId) {
+    if (!section || section->ended) return false;
+    if (section->type != CSEQ_SECTION_CHANNEL) return false;
+    return cseq_buffer_write_u8(section->buffer, ASEQ_OP_CHAN_FONTINSTR)
+        && cseq_buffer_write_u8(section->buffer, fontId)
+        && cseq_buffer_write_u8(section->buffer, instId);
+}
+
 RECOMP_EXPORT bool cseq_noshort(CSeqSection* section) {
     if (!section || section->ended) return false;
     if (section->type != CSEQ_SECTION_CHANNEL) return false;
@@ -377,6 +392,13 @@ RECOMP_EXPORT bool cseq_ldlayer(CSeqSection* channel, u8 layerNum, CSeqSection* 
 }
 
 // Layer commands
+
+RECOMP_EXPORT bool cseq_ldelay(CSeqSection* section, u16 delay) {
+    if (!section || section->ended) return false;
+    if (section->type != CSEQ_SECTION_LAYER) return false;
+    return cseq_buffer_write_u8(section->buffer, ASEQ_OP_LAYER_LDELAY)
+        && cseq_buffer_write_var(section->buffer, delay);
+}
 
 RECOMP_EXPORT bool cseq_notedvg(CSeqSection* section, u8 pitch, u16 delay, u8 velocity, u8 gateTime) {
     if (!section || section->ended) return false;
