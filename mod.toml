@@ -40,7 +40,6 @@ dependencies = [
 
 # Native libraries (e.g. DLLs) and the functions they export.
 native_libraries = [
-   { name = "mm_audio_api_extlib", funcs = [] }
 ]
 
 # Inputs to the mod tool.
