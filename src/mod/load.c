@@ -266,22 +266,35 @@ RECOMP_PATCH s32 AudioLoad_Dma(OSIoMesg* mesg, u32 priority, s32 direction, uint
 }
 
 RECOMP_PATCH void* AudioLoad_DmaSampleData(uintptr_t devAddr, size_t size, s32 arg2, u8* dmaIndexRef, s32 medium) {
+    uintptr_t dmaDevAddr = devAddr;
+    size_t dmaSize = size;
     bool didAllocate;
-    u8* ramAddr = AudioApi_RspCacheAlloc((void*)devAddr, size, &didAllocate);
+    u8* ramAddr;
+
+    if (!IS_KSEG0(devAddr)) {
+        dmaDevAddr = devAddr & ~0xF;
+        dmaSize += devAddr & 0xF;
+    }
+
+    ramAddr = AudioApi_RspCacheAlloc((void*)dmaDevAddr, dmaSize, &didAllocate);
+    if (!ramAddr) return NULL;
 
     if (didAllocate) {
         if (IS_KSEG0(devAddr)) {
             // If the sample is in RAM, call AudioLoad_Dma_Rom directly since there are a limited
             // number of entries in the message queue.
-            AudioApi_Dma_Mod(NULL, 0, 0, devAddr, ramAddr, size, NULL, 0, "");
+            AudioApi_Dma_Mod(NULL, 0, 0, dmaDevAddr, ramAddr, dmaSize, NULL, 0, "");
         } else {
+            // Vanilla game does not have this check, meaning the message buffer array can overflow
+            // causing the audio thread to softlock.
             if (gAudioCtx.curAudioFrameDmaCount + 1 >= MAX_SAMPLE_DMA_PER_FRAME) {
                 return NULL;
             }
-            AudioApi_Dma_Rom(&currAudioFrameDmaIoMesgBuf[gAudioCtx.curAudioFrameDmaCount++], OS_MESG_PRI_NORMAL,
-                             OS_READ, devAddr, ramAddr, size, &gAudioCtx.curAudioFrameDmaQueue, medium, "SUPERDMA");
+            AudioApi_Dma_Rom(&currAudioFrameDmaIoMesgBuf[gAudioCtx.curAudioFrameDmaCount++],
+                             OS_MESG_PRI_NORMAL, OS_READ, dmaDevAddr, ramAddr, dmaSize,
+                             &gAudioCtx.curAudioFrameDmaQueue, medium, "SUPERDMA");
         }
     }
 
-    return ramAddr;
+    return (devAddr - dmaDevAddr) + ramAddr;
 }
