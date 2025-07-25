@@ -68,10 +68,11 @@ typedef struct RspCacheEntry {
 typedef struct RspCache {
     AudioAllocPool pool;
     RspCacheEntry entries[RSP_CACHE_CAPACITY];
+    u32 pos;
 } RspCache;
 
-LoadBuffer loadBuffer = {0};
-RspCache rspCache = {0};
+LoadBuffer loadBuffer;
+RspCache rspCache;
 
 extern void AudioHeap_InitSessionPool(AudioSessionPoolSplit* split);
 extern void AudioHeap_ResetLoadStatus(void);
@@ -128,7 +129,7 @@ void* AudioApi_RspCacheAlloc(void* addr, size_t size, bool* didAllocate) {
     RspCacheEntry* entry;
 
     // Search cache for existing range
-    for (s32 i = 0; i < RSP_CACHE_CAPACITY; i++) {
+    for (s32 i = 0; i < pool->count; i++) {
         entry = &rspCache.entries[i];
         if (entry->cacheAddr == NULL) continue;
 
@@ -154,13 +155,15 @@ void* AudioApi_RspCacheAlloc(void* addr, size_t size, bool* didAllocate) {
         pool->curAddr = pool->startAddr;
     }
 
-    entry = &rspCache.entries[pool->count];
+    entry = &rspCache.entries[rspCache.pos];
     entry->cacheAddr = pool->curAddr;
     entry->addr = (uintptr_t)addr;
     entry->size = size;
 
     pool->curAddr += ALIGN16(size);
-    pool->count = (pool->count + 1) % RSP_CACHE_CAPACITY;
+    pool->count = MIN(pool->count + 1, RSP_CACHE_CAPACITY);
+
+    rspCache.pos = (rspCache.pos + 1) % RSP_CACHE_CAPACITY;
 
     *didAllocate = true;
     return entry->cacheAddr;
@@ -185,9 +188,7 @@ void AudioApi_InitHeap() {
 
     loadBuffer.pool.startAddr = (void*)ALIGN16((uintptr_t)loadBuffer.pool.startAddr);
     rspCache.pool.startAddr = (void*)ALIGN16((uintptr_t)rspCache.pool.startAddr);
-    for (s32 i = 0; i < RSP_CACHE_CAPACITY; i++) {
-        rspCache.entries[i].cacheAddr = NULL;
-    }
+    rspCache.pos = 0;
 }
 
 RECOMP_PATCH void AudioHeap_Init(void) {

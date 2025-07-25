@@ -7,6 +7,5 @@
 
 extern OSIoMesg currAudioFrameDmaIoMesgBuf[MAX_SAMPLE_DMA_PER_FRAME];
 extern OSMesg currAudioFrameDmaMesgBuf[MAX_SAMPLE_DMA_PER_FRAME];
-extern u8* sExtSeqLoadStatus;
 
 #endif

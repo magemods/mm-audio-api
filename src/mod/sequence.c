@@ -3,8 +3,8 @@
 #include "recomputils.h"
 #include "init.h"
 #include "sequence_functions.h"
+#include "load_status.h"
 #include "heap.h"
-#include "load.h"
 #include "queue.h"
 #include "util.h"
 

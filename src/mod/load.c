@@ -1,6 +1,7 @@
 #include "load.h"
 #include "modding.h"
 #include "recomputils.h"
+#include "load_status.h"
 #include "heap.h"
 
 /**
@@ -13,21 +14,14 @@
 #define ASYNC_ID(v) ((u8)(v >> 8))
 #define ASYNC_STATUS(v) ((u8)(v >> 0))
 
-typedef enum {
-    LOAD_STATUS_WAITING,
-    LOAD_STATUS_START,
-    LOAD_STATUS_LOADING,
-    LOAD_STATUS_DONE
-} SlowLoadStatus;
-
 extern DmaHandler sDmaHandler;
 
 OSIoMesg currAudioFrameDmaIoMesgBuf[MAX_SAMPLE_DMA_PER_FRAME];
 OSMesg currAudioFrameDmaMesgBuf[MAX_SAMPLE_DMA_PER_FRAME];
-u8* sExtSeqLoadStatus = gAudioCtx.seqLoadStatus;
 
 extern AudioTable* AudioLoad_GetLoadTable(s32 tableType);
 extern u32 AudioLoad_GetRealTableIndex(s32 tableType, u32 id);
+extern void* AudioLoad_SearchCaches(s32 tableType, s32 id);
 extern void AudioLoad_FinishAsyncLoad(AudioAsyncLoad* asyncLoad);
 extern void AudioLoad_SyncDma(uintptr_t devAddr, u8* ramAddr, size_t size, s32 medium);
 extern AudioAsyncLoad* AudioLoad_StartAsyncLoad(uintptr_t devAddr, void* ramAddr, size_t size, s32 medium,
@@ -35,68 +29,6 @@ extern AudioAsyncLoad* AudioLoad_StartAsyncLoad(uintptr_t devAddr, void* ramAddr
 
 RECOMP_DECLARE_EVENT(AudioApi_SequenceLoadedInternal(s32 seqId, void** ramAddrPtr));
 RECOMP_DECLARE_EVENT(AudioApi_SoundFontLoadedInternal(s32 fontId, void** ramAddrPtr));
-
-
-// ======== LOAD STATUS FUNCTIONS ========
-
-s32 AudioApi_GetTableEntryLoadStatus(s32 tableType, u32 id) {
-    if ((id & 0xFF) == 0xFF || (id & 0xFF) == 0xFE) return LOAD_STATUS_PERMANENT;
-
-    AudioTable* table = AudioLoad_GetLoadTable(tableType);
-    u32 realId = AudioLoad_GetRealTableIndex(tableType, id);
-    if (tableType == SEQUENCE_TABLE) {
-        return sExtSeqLoadStatus[realId];
-    } else if (tableType == FONT_TABLE) {
-        return gAudioCtx.fontLoadStatus[realId];
-    } else {
-        return LOAD_STATUS_NOT_LOADED;
-    }
-}
-
-void AudioApi_SetTableEntryLoadStatus(s32 tableType, s32 id, s32 status) {
-    if ((id & 0xFF) == 0xFF || (id & 0xFF) == 0xFE) return;
-    if (status == LOAD_STATUS_NOT_LOADED || status == LOAD_STATUS_DISCARDABLE
-        || status == LOAD_STATUS_MAYBE_DISCARDABLE) return;
-
-    AudioTable* table = AudioLoad_GetLoadTable(tableType);
-    u32 realId = AudioLoad_GetRealTableIndex(tableType, id);
-    if (tableType == SEQUENCE_TABLE) {
-        sExtSeqLoadStatus[realId] = status;
-    } else if (tableType == FONT_TABLE) {
-        gAudioCtx.fontLoadStatus[realId] = status;
-    }
-}
-
-RECOMP_PATCH s32 AudioLoad_IsSeqLoadComplete(s32 seqId) {
-    return AudioApi_GetTableEntryLoadStatus(SEQUENCE_TABLE, seqId) >= LOAD_STATUS_COMPLETE;
-}
-
-RECOMP_PATCH void AudioLoad_SetSeqLoadStatus(s32 seqId, s32 status) {
-    AudioApi_SetTableEntryLoadStatus(SEQUENCE_TABLE, seqId, status);
-}
-
-RECOMP_PATCH s32 AudioLoad_IsFontLoadComplete(s32 fontId) {
-    return AudioApi_GetTableEntryLoadStatus(FONT_TABLE, fontId) >= LOAD_STATUS_COMPLETE;
-}
-
-RECOMP_PATCH void AudioLoad_SetFontLoadStatus(s32 fontId, s32 status) {
-    AudioApi_SetTableEntryLoadStatus(FONT_TABLE, fontId, status);
-}
-
-RECOMP_PATCH void* AudioHeap_SearchCaches(s32 tableType, s32 cache, s32 id) {
-    AudioTable* table = AudioLoad_GetLoadTable(tableType);
-    u32 realId = AudioLoad_GetRealTableIndex(tableType, id);
-    uintptr_t romAddr = table->entries[realId].romAddr;
-    return IS_KSEG0(romAddr) ? (void*)romAddr : NULL;
-}
-
-RECOMP_PATCH void* AudioHeap_SearchRegularCaches(s32 tableType, s32 cache, s32 id) {
-    return AudioHeap_SearchCaches(tableType, 0, id);
-}
-
-RECOMP_PATCH void* AudioHeap_SearchPermanentCache(s32 tableType, s32 id) {
-    return AudioHeap_SearchCaches(tableType, 0, id);
-}
 
 
 // ======== LOAD FUNCTIONS ========
@@ -112,11 +44,12 @@ RECOMP_PATCH void* AudioLoad_SyncLoad(s32 tableType, u32 id, s32* didAllocate) {
     AudioTable* table = AudioLoad_GetLoadTable(tableType);
     u32 realId = AudioLoad_GetRealTableIndex(tableType, id);
     uintptr_t romAddr = table->entries[realId].romAddr;
+    s32 cachePolicy = table->entries[id].cachePolicy;
 
     // Certain functions such as `AudioLoad_RelocateFont` will run each time data is loaded from
     // the ROM. Since after the first load we persist the data in memory, we will only set this
     // value to true if this is the first load.
-    *didAllocate = AudioApi_GetTableEntryLoadStatus(tableType, realId) == LOAD_STATUS_NOT_LOADED;
+    *didAllocate = AudioLoad_SearchCaches(tableType, realId) == NULL;
 
     // If it's in memory already, just return the pointer
     if (IS_KSEG0(romAddr)) {
@@ -133,6 +66,7 @@ RECOMP_PATCH void* AudioLoad_SyncLoad(s32 tableType, u32 id, s32* didAllocate) {
 
     AudioLoad_SyncDma(romAddr, ramAddr, size, medium);
     AudioApi_SetTableEntryLoadStatus(tableType, realId, LOAD_STATUS_COMPLETE);
+    AudioApi_PushFakeCache(tableType, cachePolicy, realId);
 
     // For sequences, the following event is where the data will be copied into mod memory.
     // For soundfonts, the following event currently does nothing.
@@ -152,9 +86,10 @@ RECOMP_PATCH void AudioLoad_AsyncLoad(s32 tableType, s32 id, s32 nChunks, s32 re
     AudioTable* table = AudioLoad_GetLoadTable(tableType);
     u32 realId = AudioLoad_GetRealTableIndex(tableType, id);
     uintptr_t romAddr = table->entries[realId].romAddr;
+    s32 cachePolicy = table->entries[id].cachePolicy;
 
     if (IS_KSEG0(romAddr)) {
-        if (AudioApi_GetTableEntryLoadStatus(tableType, realId) == LOAD_STATUS_NOT_LOADED) {
+        if (AudioLoad_SearchCaches(tableType, realId) == NULL) {
             // If this is the first time loading the data, but it is already in memory, we will just
             // call `AudioLoad_FinishAsyncLoad` directly.
             AudioAsyncLoad asyncLoad = {0};
@@ -170,6 +105,7 @@ RECOMP_PATCH void AudioLoad_AsyncLoad(s32 tableType, s32 id, s32 nChunks, s32 re
             osSendMesg(retQueue, (OSMesg)MK_ASYNC_MSG(retData, 0, 0, LOAD_STATUS_NOT_LOADED), OS_MESG_NOBLOCK);
         }
         AudioApi_SetTableEntryLoadStatus(tableType, realId, LOAD_STATUS_COMPLETE);
+        AudioApi_PushFakeCache(tableType, cachePolicy, realId);
         return;
     }
 
@@ -185,6 +121,7 @@ RECOMP_PATCH void AudioLoad_AsyncLoad(s32 tableType, s32 id, s32 nChunks, s32 re
     AudioLoad_StartAsyncLoad(romAddr, ramAddr, size, medium, nChunks, retQueue,
                              MK_ASYNC_MSG(retData, tableType, realId, LOAD_STATUS_COMPLETE));
     AudioApi_SetTableEntryLoadStatus(tableType, realId, LOAD_STATUS_IN_PROGRESS);
+    AudioApi_PushFakeCache(tableType, cachePolicy, realId);
 }
 
 RECOMP_HOOK("AudioLoad_FinishAsyncLoad") void onAudioLoad_FinishAsyncLoad(AudioAsyncLoad* asyncLoad) {
