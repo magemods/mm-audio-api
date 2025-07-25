@@ -2,7 +2,7 @@
 #define __MM_AUDIO_API__
 
 /*! \file audio_api.h
-    \version 0.2.0
+    \version 0.4.0
     \brief The main header for Majora's Mask Recomp Audio API
  */
 

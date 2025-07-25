@@ -2,7 +2,7 @@
 #define __MM_CSEQ__
 
 /*! \file cseq.h
-    \version 0.2.0
+    \version 0.4.0
     \brief Functions for programatically building sequence files
  */
 
