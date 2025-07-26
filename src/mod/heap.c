@@ -124,11 +124,10 @@ void AudioHeap_LoadBufferFree(s32 tableType, s32 id) {
     }
 }
 
-void* AudioApi_RspCacheAlloc(void* addr, size_t size, bool* didAllocate) {
+void* AudioApi_RspCacheSearch(void* addr, size_t size) {
     AudioAllocPool* pool = &rspCache.pool;
     RspCacheEntry* entry;
 
-    // Search cache for existing range
     for (s32 i = 0; i < pool->count; i++) {
         entry = &rspCache.entries[i];
         if (entry->cacheAddr == NULL) continue;
@@ -145,9 +144,21 @@ void* AudioApi_RspCacheAlloc(void* addr, size_t size, bool* didAllocate) {
 
         // Check if we already have a cached entry for this memory range
         if ((entry->addr <= (uintptr_t)addr) && ((uintptr_t)addr + size <= entry->addr + entry->size)) {
-            *didAllocate = false;
             return entry->cacheAddr + ((uintptr_t)addr - entry->addr);
         }
+    }
+    return NULL;
+}
+
+void* AudioApi_RspCacheAlloc(void* addr, size_t size, bool* didAllocate) {
+    AudioAllocPool* pool = &rspCache.pool;
+    RspCacheEntry* entry;
+
+    // Search cache for existing range
+    u8* cacheAddr = AudioApi_RspCacheSearch(addr, size);
+    if (addr != NULL && cacheAddr != NULL) {
+        *didAllocate = false;
+        return cacheAddr;
     }
 
     // If not enough space at current pool address, loop back to start
