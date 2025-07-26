@@ -16,6 +16,10 @@ u32 refcounter_inc(void* ptr);
 u32 refcounter_dec(void* ptr);
 u32 refcounter_get(void* ptr);
 
+int Utils_MemCmp(const void *a, const void *b, size_t size);
+
+char *Utils_StrDup(const char *s);
+
 void print_bytes(void *ptr, int size);
 
 Fnv32_t fnv_32a_buf(void *buf, size_t len, Fnv32_t hashval);
