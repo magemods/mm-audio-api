@@ -9,7 +9,10 @@ extern u8 gAudioHeap[0x138000];
 
 void* AudioHeap_LoadBufferAlloc(s32 tableType, s32 id, size_t size);
 void AudioHeap_LoadBufferFree(s32 tableType, s32 id);
-void* AudioApi_RspCacheAlloc(void* addr, size_t size, bool* didAllocate);
+void* AudioApi_RspCacheSearch(void* addr, size_t size);
+void* AudioApi_RspCacheOffsetSearch(void* addr, size_t size, size_t offset);
+void* AudioApi_RspCacheAlloc(void* addr, size_t size, size_t offset);
 void* AudioApi_RspCacheMemcpy(void* addr, size_t size);
+void AudioApi_RspCacheInvalidateLastEntry();
 
 #endif

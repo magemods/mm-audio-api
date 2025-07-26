@@ -63,6 +63,7 @@ typedef struct RspCacheEntry {
     u8* cacheAddr;
     uintptr_t addr;
     size_t size;
+    size_t offset;
 } RspCacheEntry;
 
 typedef struct RspCache {
@@ -124,31 +125,62 @@ void AudioHeap_LoadBufferFree(s32 tableType, s32 id) {
     }
 }
 
-void* AudioApi_RspCacheAlloc(void* addr, size_t size, bool* didAllocate) {
+bool AudioApi_RspCacheCheckDistance(RspCacheEntry* entry) {
+    AudioAllocPool* pool = &rspCache.pool;
+
+    u32 distance = ((uintptr_t)entry->cacheAddr < (uintptr_t)pool->curAddr)
+        ? ((uintptr_t)entry->cacheAddr + pool->size - (uintptr_t)pool->curAddr)
+        : ((uintptr_t)entry->cacheAddr - (uintptr_t)pool->curAddr);
+
+    // Invalidate an entry if less than defined minimum distance so that it will not be
+    // overwritten by the time the RSP processes the command
+    if (distance < RSP_CACHE_MIN_DISTANCE) {
+        entry->cacheAddr = NULL;
+        return false;
+    }
+    return true;
+}
+
+void* AudioApi_RspCacheSearch(void* addr, size_t size) {
     AudioAllocPool* pool = &rspCache.pool;
     RspCacheEntry* entry;
 
-    // Search cache for existing range
     for (s32 i = 0; i < pool->count; i++) {
         entry = &rspCache.entries[i];
-        if (entry->cacheAddr == NULL) continue;
-
-        // Invalidate an entry if less than defined minimum distance so that it will not be
-        // overwritten by the time the RSP processes the command
-        u32 distance = ((uintptr_t)entry->cacheAddr < (uintptr_t)pool->curAddr)
-            ? ((uintptr_t)entry->cacheAddr + pool->size - (uintptr_t)pool->curAddr)
-            : ((uintptr_t)entry->cacheAddr - (uintptr_t)pool->curAddr);
-        if (distance < RSP_CACHE_MIN_DISTANCE) {
-            entry->cacheAddr = NULL;
+        if (entry->cacheAddr == NULL || !AudioApi_RspCacheCheckDistance(entry)) {
             continue;
         }
-
-        // Check if we already have a cached entry for this memory range
         if ((entry->addr <= (uintptr_t)addr) && ((uintptr_t)addr + size <= entry->addr + entry->size)) {
-            *didAllocate = false;
             return entry->cacheAddr + ((uintptr_t)addr - entry->addr);
         }
     }
+    return NULL;
+}
+
+void* AudioApi_RspCacheOffsetSearch(void* addr, size_t size, size_t offset) {
+    AudioAllocPool* pool = &rspCache.pool;
+    RspCacheEntry* entry;
+
+    for (s32 i = 0; i < pool->count; i++) {
+        entry = &rspCache.entries[i];
+        if (entry->cacheAddr == NULL || !AudioApi_RspCacheCheckDistance(entry)) {
+            continue;
+        }
+        // Starting address must match exactly
+        if (entry->addr != (uintptr_t)addr) {
+            continue;
+        }
+        if ((entry->offset <= offset) && (offset + size <= entry->offset + entry->size)) {
+            return entry->cacheAddr + (offset - entry->offset);
+        }
+    }
+    return NULL;
+}
+
+void* AudioApi_RspCacheAlloc(void* addr, size_t size, size_t offset) {
+    AudioAllocPool* pool = &rspCache.pool;
+    RspCacheEntry* entry;
+    u8* cacheAddr;
 
     // If not enough space at current pool address, loop back to start
     if ((pool->curAddr + size) > (pool->startAddr + pool->size)) {
@@ -159,24 +191,33 @@ void* AudioApi_RspCacheAlloc(void* addr, size_t size, bool* didAllocate) {
     entry->cacheAddr = pool->curAddr;
     entry->addr = (uintptr_t)addr;
     entry->size = size;
+    entry->offset = offset;
 
     pool->curAddr += ALIGN16(size);
     pool->count = MIN(pool->count + 1, RSP_CACHE_CAPACITY);
 
     rspCache.pos = (rspCache.pos + 1) % RSP_CACHE_CAPACITY;
 
-    *didAllocate = true;
     return entry->cacheAddr;
 }
 
 void* AudioApi_RspCacheMemcpy(void* addr, size_t size) {
-    bool didAllocate;
-    void* cacheAddr = AudioApi_RspCacheAlloc(addr, size, &didAllocate);
+    void* cacheAddr;
 
-    if (didAllocate) {
-        Lib_MemCpy(cacheAddr, addr, size);
+    cacheAddr = AudioApi_RspCacheSearch(addr, size);
+    if (cacheAddr != NULL) {
+        return cacheAddr;
     }
+
+    cacheAddr = AudioApi_RspCacheAlloc(addr, size, 0);
+    Lib_MemCpy(cacheAddr, addr, size);
+
     return cacheAddr;
+}
+
+void AudioApi_RspCacheInvalidateLastEntry() {
+    rspCache.pos = (rspCache.pos + RSP_CACHE_CAPACITY - 1) % RSP_CACHE_CAPACITY;
+    rspCache.entries[rspCache.pos].cacheAddr = NULL;
 }
 
 void AudioApi_InitHeap() {
