@@ -1,6 +1,7 @@
 #include "load.h"
 #include "modding.h"
 #include "recomputils.h"
+#include "dynamicdataarray.h"
 #include "load_status.h"
 #include "heap.h"
 
@@ -14,8 +15,18 @@
 #define ASYNC_ID(v) ((u8)(v >> 8))
 #define ASYNC_STATUS(v) ((u8)(v >> 0))
 
+#define DMA_CALLBACK_DEFAULT_CAPACITY 32
+
+typedef struct AudioApiDmaCallbackEntry {
+    AudioApiDmaCallback callback;
+    u32 arg0;
+    u32 arg1;
+    u32 arg2;
+} AudioApiDmaCallbackEntry;
+
 extern DmaHandler sDmaHandler;
 
+DynamicDataArray dmaCallbacks;
 OSIoMesg currAudioFrameDmaIoMesgBuf[MAX_SAMPLE_DMA_PER_FRAME];
 OSMesg currAudioFrameDmaMesgBuf[MAX_SAMPLE_DMA_PER_FRAME];
 
@@ -30,6 +41,9 @@ extern AudioAsyncLoad* AudioLoad_StartAsyncLoad(uintptr_t devAddr, void* ramAddr
 RECOMP_DECLARE_EVENT(AudioApi_SequenceLoadedInternal(s32 seqId, void** ramAddrPtr));
 RECOMP_DECLARE_EVENT(AudioApi_SoundFontLoadedInternal(s32 fontId, void** ramAddrPtr));
 
+RECOMP_CALLBACK(".", AudioApi_InitInternal) void AudioApi_LoadInit() {
+    DynDataArr_init(&dmaCallbacks, sizeof(AudioApiDmaCallbackEntry), DMA_CALLBACK_DEFAULT_CAPACITY);
+}
 
 // ======== LOAD FUNCTIONS ========
 
@@ -151,9 +165,34 @@ RECOMP_PATCH u8* AudioLoad_SyncLoadSeq(s32 seqId) {
 
 // ======== DMA FUNCTIONS ========
 
-s32 AudioApi_Dma_Mod(OSIoMesg* mesg, u32 priority, s32 direction, uintptr_t devAddr, void* ramAddr,
-                     size_t size, OSMesgQueue* reqQueue, s32 medium, const char* dmaFuncType) {
-    if (reqQueue) osSendMesg(reqQueue, NULL, OS_MESG_NOBLOCK);
+RECOMP_EXPORT uintptr_t AudioApi_AddDmaCallback(AudioApiDmaCallback callback, u32 arg0, u32 arg1, u32 arg2) {
+    u16 id = dmaCallbacks.count;
+    AudioApiDmaCallbackEntry entry = { callback, arg0, arg1, arg2 };
+
+    DynDataArr_push(&dmaCallbacks, &entry);
+
+    return DMA_CALLBACK_START_DEV_ADDR + id;
+}
+
+s32 AudioApi_Dma_Callback(uintptr_t devAddr, void* ramAddr, size_t size, size_t offset) {
+    u16 id = devAddr - DMA_CALLBACK_START_DEV_ADDR;
+
+    if (gAudioCtx.resetTimer > 16) {
+        return -1;
+    }
+    if (id >= (u16)dmaCallbacks.count) {
+        return -1;
+    }
+
+    AudioApiDmaCallbackEntry* entry = DynDataArr_get(&dmaCallbacks, id);
+    return entry->callback(ramAddr, size, offset, entry->arg0, entry->arg1, entry->arg2);
+}
+
+s32 AudioApi_Dma_Mod(uintptr_t devAddr, void* ramAddr, size_t size) {
+    if (gAudioCtx.resetTimer > 16) {
+        return -1;
+    }
+
     Lib_MemCpy(ramAddr, (void*)devAddr, size);
     return 0;
 }
@@ -196,41 +235,81 @@ s32 AudioApi_Dma_Rom(OSIoMesg* mesg, u32 priority, s32 direction, uintptr_t devA
 RECOMP_PATCH s32 AudioLoad_Dma(OSIoMesg* mesg, u32 priority, s32 direction, uintptr_t devAddr, void* ramAddr,
                                size_t size, OSMesgQueue* reqQueue, s32 medium, const char* dmaFuncType) {
     if (IS_KSEG0(devAddr)) {
-        return AudioApi_Dma_Mod(mesg, priority, direction, devAddr, ramAddr, size, reqQueue, medium, dmaFuncType);
-    } else {
-        return AudioApi_Dma_Rom(mesg, priority, direction, devAddr, ramAddr, size, reqQueue, medium, dmaFuncType);
+        osSendMesg(reqQueue, NULL, OS_MESG_NOBLOCK);
+        return AudioApi_Dma_Mod(devAddr, ramAddr, size);
     }
+    if (IS_DMA_CALLBACK_DEV_ADDR(devAddr)) {
+        osSendMesg(reqQueue, NULL, OS_MESG_NOBLOCK);
+        return AudioApi_Dma_Callback(devAddr, ramAddr, size, 0);
+    }
+    return AudioApi_Dma_Rom(mesg, priority, direction, devAddr, ramAddr, size, reqQueue, medium, dmaFuncType);
 }
 
 RECOMP_PATCH void* AudioLoad_DmaSampleData(uintptr_t devAddr, size_t size, s32 arg2, u8* dmaIndexRef, s32 medium) {
-    uintptr_t dmaDevAddr = devAddr;
-    size_t dmaSize = size;
-    bool didAllocate;
+    uintptr_t dmaDevAddr;
+    size_t dmaSize;
     u8* ramAddr;
+    s32 result;
 
-    if (!IS_KSEG0(devAddr)) {
-        dmaDevAddr = devAddr & ~0xF;
-        dmaSize += devAddr & 0xF;
+    if (IS_KSEG0(devAddr)) {
+        ramAddr = AudioApi_RspCacheSearch((void*)devAddr, size);
+        if (ramAddr) {
+            return ramAddr;
+        }
+        ramAddr = AudioApi_RspCacheAlloc((void*)devAddr, size, 0);
+        if (!ramAddr) {
+            return NULL;
+        }
+        result = AudioApi_Dma_Mod(devAddr, ramAddr, size);
+        if (result != 0) {
+            AudioApi_RspCacheInvalidateLastEntry();
+            return NULL;
+        }
+        return ramAddr;
     }
 
-    ramAddr = AudioApi_RspCacheAlloc((void*)dmaDevAddr, dmaSize, &didAllocate);
-    if (!ramAddr) return NULL;
-
-    if (didAllocate) {
-        if (IS_KSEG0(devAddr)) {
-            // If the sample is in RAM, call AudioLoad_Dma_Rom directly since there are a limited
-            // number of entries in the message queue.
-            AudioApi_Dma_Mod(NULL, 0, 0, dmaDevAddr, ramAddr, dmaSize, NULL, 0, "");
-        } else {
-            // Vanilla game does not have this check, meaning the message buffer array can overflow
-            // causing the audio thread to softlock.
-            if (gAudioCtx.curAudioFrameDmaCount + 1 >= MAX_SAMPLE_DMA_PER_FRAME) {
-                return NULL;
-            }
-            AudioApi_Dma_Rom(&currAudioFrameDmaIoMesgBuf[gAudioCtx.curAudioFrameDmaCount++],
-                             OS_MESG_PRI_NORMAL, OS_READ, dmaDevAddr, ramAddr, dmaSize,
-                             &gAudioCtx.curAudioFrameDmaQueue, medium, "SUPERDMA");
+    if (IS_DMA_CALLBACK_DEV_ADDR(devAddr)) {
+        ramAddr = AudioApi_RspCacheOffsetSearch((void*)devAddr, size * SAMPLE_SIZE, arg2 * SAMPLE_SIZE);
+        if (ramAddr) {
+            return ramAddr;
         }
+        ramAddr = AudioApi_RspCacheAlloc((void*)devAddr, size * SAMPLE_SIZE, arg2 * SAMPLE_SIZE);
+        if (!ramAddr) {
+            return NULL;
+        }
+        result = AudioApi_Dma_Callback(devAddr, ramAddr, size, arg2);
+        if (result != 0) {
+            AudioApi_RspCacheInvalidateLastEntry();
+            return NULL;
+        }
+        return ramAddr;
+    }
+
+    // Vanilla game does not have this check, meaning the message buffer array can overflow
+    // causing the audio thread to softlock.
+    if (gAudioCtx.curAudioFrameDmaCount + 1 >= MAX_SAMPLE_DMA_PER_FRAME) {
+        return NULL;
+    }
+
+    dmaDevAddr = devAddr & ~0xF;
+    dmaSize = size + (devAddr & 0xF);
+
+    ramAddr = AudioApi_RspCacheSearch((void*)dmaDevAddr, dmaSize);
+    if (ramAddr) {
+        return (devAddr - dmaDevAddr) + ramAddr;
+    }
+
+    ramAddr = AudioApi_RspCacheAlloc((void*)dmaDevAddr, dmaSize, 0);
+    if (!ramAddr) {
+        return NULL;
+    }
+
+    result = AudioApi_Dma_Rom(&currAudioFrameDmaIoMesgBuf[gAudioCtx.curAudioFrameDmaCount++],
+                              OS_MESG_PRI_NORMAL, OS_READ, dmaDevAddr, ramAddr, dmaSize,
+                              &gAudioCtx.curAudioFrameDmaQueue, medium, "SUPERDMA");
+    if (result != 0) {
+        AudioApi_RspCacheInvalidateLastEntry();
+        return NULL;
     }
 
     return (devAddr - dmaDevAddr) + ramAddr;

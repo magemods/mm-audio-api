@@ -1,6 +1,7 @@
 #include "global.h"
 #include "modding.h"
 #include "heap.h"
+#include "load.h"
 #include "util.h"
 
 /**
@@ -353,13 +354,23 @@ RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* samp
                         // These extra samples overlap the samples requested in the next update.
                         sampleDataChunkSize =
                             MIN(numSamplesToLoadAdj + SAMPLES_PER_FRAME, numSamplesUntilEnd) * SAMPLE_SIZE;
-                        sampleAddrOffset = synthState->samplePosInt * SAMPLE_SIZE;
-                        samplesToLoadAddr =
-                            AudioLoad_DmaSampleData((uintptr_t)(sampleAddr + sampleAddrOffset),
-                                                    sampleDataChunkSize, flags,
-                                                    &synthState->sampleDmaIndex, sample->medium);
 
-                        AudioSynth_LoadBuffer(cmd++, DMEM_UNCOMPRESSED_NOTE, sampleDataChunkSize, samplesToLoadAddr);
+                        if (IS_DMA_CALLBACK_DEV_ADDR(sampleAddr)) {
+                            samplesToLoadAddr =
+                                AudioLoad_DmaSampleData((uintptr_t)sampleAddr, sampleDataChunkSize / SAMPLE_SIZE,
+                                                        synthState->samplePosInt,
+                                                        &synthState->sampleDmaIndex, sample->medium);
+                        } else {
+                            sampleAddrOffset = synthState->samplePosInt * SAMPLE_SIZE;
+                            samplesToLoadAddr =
+                                AudioLoad_DmaSampleData((uintptr_t)(sampleAddr + sampleAddrOffset),
+                                                        sampleDataChunkSize, flags,
+                                                        &synthState->sampleDmaIndex, sample->medium);
+                        }
+
+                        if (samplesToLoadAddr) {
+                            AudioSynth_LoadBuffer(cmd++, DMEM_UNCOMPRESSED_NOTE, sampleDataChunkSize, samplesToLoadAddr);
+                        }
 
                         flags = A_CONTINUE;
                         skipBytes = 0;
