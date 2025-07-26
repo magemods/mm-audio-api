@@ -239,8 +239,14 @@ RECOMP_CALLBACK(".", AudioApi_SequenceLoadedInternal) void AudioApi_RelocateSequ
         size_t size = gAudioCtx.sequenceTable->entries[seqId].size;
         void* ramAddr = recomp_alloc(size);
         Lib_MemCpy(ramAddr, *ramAddrPtr, size);
-        gAudioCtx.sequenceTable->entries[seqId].romAddr = (uintptr_t)ramAddr;
+        AudioHeap_LoadBufferFree(SEQUENCE_TABLE, seqId);
         *ramAddrPtr = ramAddr;
+    }
+
+    // If this sequence was loaded from ROM or a callback, update the entry's romAddr to our new
+    // permanent memory.
+    if (!IS_KSEG0(gAudioCtx.sequenceTable->entries[seqId].romAddr)) {
+        gAudioCtx.sequenceTable->entries[seqId].romAddr = (uintptr_t)(*ramAddrPtr);
     }
 
     // Dispatch loaded event

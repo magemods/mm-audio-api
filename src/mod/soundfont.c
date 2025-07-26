@@ -5,6 +5,7 @@
 #include "recompdata.h"
 #include "init.h"
 #include "heap.h"
+#include "load.h"
 #include "queue.h"
 #include "util.h"
 
@@ -230,9 +231,6 @@ CustomSoundFont* AudioApi_ImportVanillaSoundFont(s32 fontId, uintptr_t* fontData
     Lib_MemSet(soundFont->soundEffects, 0, size);
     Lib_MemCpy(soundFont->soundEffects, (void*)RELOC_TO_RAM(fontData[1], fontData),
                numSfx * sizeof(SoundEffect));
-
-    soundFont->origRomAddr = entry->romAddr;
-    entry->romAddr = (uintptr_t)soundFont;
 
     return soundFont;
 
@@ -573,8 +571,8 @@ RECOMP_PATCH void AudioLoad_RelocateFont(s32 fontId, void* fontDataStartAddr, Sa
     SoundEffect* soundEffect;
     s32 i;
 
-    // We've just loaded this font from the ROM, so apply any changes from our load queue
-    if (IS_AUDIO_HEAP_MEMORY(fontData)) {
+    // We've just loaded this font from ROM or callback, so apply any changes from our load queue
+    if (!IS_KSEG0(entry->romAddr)) {
         fontData = AudioApi_ImportVanillaSoundFont(fontId, (uintptr_t*)fontDataStartAddr);
         AudioApi_ApplySoundFontChanges(fontId, fontData);
     }
@@ -640,6 +638,20 @@ RECOMP_PATCH void AudioLoad_RelocateFont(s32 fontId, void* fontDataStartAddr, Sa
     gAudioCtx.soundFontList[fontId].drums = fontData->drums;
     gAudioCtx.soundFontList[fontId].soundEffects = fontData->soundEffects;
     gAudioCtx.soundFontList[fontId].instruments = fontData->instruments;
+
+    // Free temporary memory
+    if (IS_AUDIO_HEAP_MEMORY(fontDataStartAddr)) {
+        AudioHeap_LoadBufferFree(FONT_TABLE, fontId);
+    } else if (IS_DMA_CALLBACK_DEV_ADDR(entry->romAddr)) {
+        recomp_free(fontDataStartAddr);
+    }
+
+    // If this sequence was loaded from ROM or a callback, update the entry's romAddr to our new
+    // permanent memory.
+    if (!IS_KSEG0(entry->romAddr)) {
+        fontData->origRomAddr = entry->romAddr;
+        entry->romAddr = (uintptr_t)fontData;
+    }
 
     // Dispatch loaded event
     AudioApi_SoundFontLoaded(fontId, (u8*)fontData);
