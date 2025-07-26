@@ -11,9 +11,13 @@
 #include "command_macros_base.h"
 #include "audio/soundfont_file.h"
 
+typedef s32 (audioapi_dma_callback_t)(void* ramAddr, size_t size, size_t offset, u32 arg0, u32 arg1);
+
 /**
  * These are the imports that most mods will use, but more imports are available.
  */
+
+RECOMP_IMPORT("magemods_audio_api", uintptr_t AudioApi_AddDmaCallback(audioapi_dma_callback_t* callback, u32 arg0, u32 arg1));
 
 RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_AddSequence(AudioTableEntry* entry));
 RECOMP_IMPORT("magemods_audio_api", void AudioApi_ReplaceSequence(s32 seqId, AudioTableEntry* entry));
