@@ -1,5 +1,6 @@
 #include "heap.h"
 #include "modding.h"
+#include "init.h"
 #include "util.h"
 
 /**
@@ -242,10 +243,8 @@ RECOMP_PATCH void AudioHeap_Init(void) {
 
     gAudioCtx.sampleDmaCount = 0;
 
-    // audio buffer parameters
+    // @mod Calculate audio buffer parameters first using the original sampling freq (32kHz usually)
     gAudioCtx.audioBufferParameters.samplingFreq = spec->samplingFreq;
-    gAudioCtx.audioBufferParameters.aiSamplingFreq = osAiSetFrequency(gAudioCtx.audioBufferParameters.samplingFreq);
-
     gAudioCtx.audioBufferParameters.numSamplesPerFrameTarget =
         ALIGN16(gAudioCtx.audioBufferParameters.samplingFreq / gAudioCtx.refreshRate);
     gAudioCtx.audioBufferParameters.numSamplesPerFrameMin =
@@ -259,7 +258,6 @@ RECOMP_PATCH void AudioHeap_Init(void) {
         ~7;
     gAudioCtx.audioBufferParameters.numSamplesPerUpdateMax = gAudioCtx.audioBufferParameters.numSamplesPerUpdate + 8;
     gAudioCtx.audioBufferParameters.numSamplesPerUpdateMin = gAudioCtx.audioBufferParameters.numSamplesPerUpdate - 8;
-    gAudioCtx.audioBufferParameters.resampleRate = 32000.0f / (s32)gAudioCtx.audioBufferParameters.samplingFreq;
     gAudioCtx.audioBufferParameters.updatesPerFrameInvScaled =
         (1.0f / 256.0f) / gAudioCtx.audioBufferParameters.updatesPerFrame;
     gAudioCtx.audioBufferParameters.updatesPerFrameScaled = gAudioCtx.audioBufferParameters.updatesPerFrame / 4.0f;
@@ -283,7 +281,7 @@ RECOMP_PATCH void AudioHeap_Init(void) {
 
     gAudioCtx.unk_2870 = gAudioCtx.refreshRate;
     gAudioCtx.unk_2870 *= gAudioCtx.audioBufferParameters.updatesPerFrame;
-    gAudioCtx.unk_2870 /= gAudioCtx.audioBufferParameters.aiSamplingFreq;
+    gAudioCtx.unk_2870 /= gAudioCtx.audioBufferParameters.samplingFreq;
     gAudioCtx.unk_2870 /= gAudioCtx.maxTempo;
 
     gAudioCtx.audioBufferParameters.specUnk4 = spec->unk_04;
@@ -296,9 +294,23 @@ RECOMP_PATCH void AudioHeap_Init(void) {
         gAudioCtx.audioBufferParameters.numSamplesPerFrameMax -= 0x10;
     }
 
+    // @mod Recalculate some parameters by scaling by FREQ_FACTOR to get to 48kHz
+    gAudioCtx.audioBufferParameters.samplingFreq = spec->samplingFreq * FREQ_FACTOR;
+    gAudioCtx.audioBufferParameters.aiSamplingFreq = osAiSetFrequency(gAudioCtx.audioBufferParameters.samplingFreq);
+    gAudioCtx.audioBufferParameters.resampleRate = 32000.0f / (s32)gAudioCtx.audioBufferParameters.samplingFreq;
+
+    gAudioCtx.audioBufferParameters.numSamplesPerFrameTarget *= FREQ_FACTOR;
+    gAudioCtx.audioBufferParameters.numSamplesPerFrameMin *= FREQ_FACTOR;
+    gAudioCtx.audioBufferParameters.numSamplesPerFrameMax *= FREQ_FACTOR;
+    gAudioCtx.audioBufferParameters.numSamplesPerUpdate *= FREQ_FACTOR / NUM_SUB_UPDATES;
+    gAudioCtx.audioBufferParameters.numSamplesPerUpdateMax *= FREQ_FACTOR / NUM_SUB_UPDATES;
+    gAudioCtx.audioBufferParameters.numSamplesPerUpdateMin *= FREQ_FACTOR / NUM_SUB_UPDATES;
+
     // Determine the maximum allowable number of audio command list entries for the rsp microcode
     gAudioCtx.maxAudioCmds =
         gAudioCtx.numNotes * 20 * gAudioCtx.audioBufferParameters.updatesPerFrame + spec->numReverbs * 30 + 800;
+    // @mod Since we need to process samples in two parts, increase the total number of cmds allowed
+    gAudioCtx.maxAudioCmds *= NUM_SUB_UPDATES;
 
     cachePoolSize = 0;
     miscPoolSize = gAudioCtx.sessionPool.size - cachePoolSize - 0x100;
@@ -364,4 +376,22 @@ RECOMP_PATCH void AudioHeap_Init(void) {
     intMask = osSetIntMask(1);
     osWritebackDCacheAll();
     osSetIntMask(intMask);
+}
+
+RECOMP_HOOK("AudioHeap_ClearAiBuffers") void onAudioHeap_ClearAiBuffers(void) {
+    // @mod this function hooked so the updated AIBUF_LEN is used
+    for (s32 i = 0; i < AIBUF_LEN; i++) {
+        gAudioCtx.aiBuffers[gAudioCtx.curAiBufferIndex][i] = 0;
+    }
+}
+
+RECOMP_HOOK("AudioHeap_ResetStep") void onAudioHeap_ResetStep(void) {
+    // @mod this function hooked so the updated AIBUF_LEN is used
+    if (gAudioCtx.resetStatus == 1) {
+        for (s32 i = 0; i < ARRAY_COUNT(gAudioCtx.aiBuffers); i++) {
+            for (s32 j = 0; j < AIBUF_LEN; j++) {
+                gAudioCtx.aiBuffers[i][j] = 0;
+            }
+        }
+    }
 }
