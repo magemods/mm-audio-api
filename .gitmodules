@@ -7,3 +7,24 @@
 [submodule "N64Recomp"]
 	path = N64Recomp
 	url = https://github.com/N64Recomp/N64Recomp.git
+[submodule "thirdparty/plog"]
+	path = thirdparty/plog
+	url = https://github.com/SergiusTheBest/plog.git
+[submodule "thirdparty/dr_libs"]
+	path = thirdparty/dr_libs
+	url = https://github.com/mackron/dr_libs
+[submodule "thirdparty/miniz"]
+	path = thirdparty/miniz
+	url = https://github.com/richgel999/miniz.git
+[submodule "thirdparty/ogg"]
+	path = thirdparty/ogg
+	url = https://github.com/xiph/ogg
+[submodule "thirdparty/vorbis"]
+	path = thirdparty/vorbis
+	url = https://github.com/xiph/vorbis.git
+[submodule "thirdparty/opus"]
+	path = thirdparty/opus
+	url = https://github.com/xiph/opus.git
+[submodule "thirdparty/opusfile"]
+	path = thirdparty/opusfile
+	url = https://github.com/xiph/opusfile.git

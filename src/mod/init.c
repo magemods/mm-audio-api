@@ -1,9 +1,11 @@
 #include "init.h"
 #include "modding.h"
+#include "recompconfig.h"
 #include "recomputils.h"
 #include "heap.h"
 #include "load.h"
 #include "queue.h"
+#include "native_bridge.h"
 
 /**
  * This file is responsible for the main Audio API init process. It patches `AudioLoad_Init()`
@@ -25,6 +27,19 @@ RECOMP_DECLARE_EVENT(AudioApi_ReadyInternal());
 RECOMP_DECLARE_EVENT(AudioApi_Init());
 RECOMP_DECLARE_EVENT(AudioApi_Ready());
 
+RECOMP_CALLBACK(".", AudioApi_InitInternal) void AudioApi_ExtLibInit() {
+    unsigned char* mod_folder = recomp_get_mod_folder_path();
+    AudioApiNative_Init(6, mod_folder);
+    recomp_free(mod_folder);
+}
+
+RECOMP_CALLBACK(".", AudioApi_ReadyInternal) void AudioApi_ExtLibReady() {
+    AudioApiNative_Ready();
+}
+
+RECOMP_HOOK_RETURN("AudioThread_UpdateImpl") void on_AudioThread_UpdateImpl() {
+    AudioApiNative_Tick();
+}
 
 RECOMP_PATCH void AudioLoad_Init(void* heap, size_t heapSize) {
     s32 pad1[9];

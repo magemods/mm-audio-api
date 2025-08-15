@@ -1,3 +1,16 @@
 target_sources(${TARGET_NAME} PUBLIC
-    "lib_main.cpp"
+    "main.cpp"
+    "thread.cpp"
+    "vfs/filesystem.cpp"
+    "vfs/native_file.cpp"
+    "vfs/zip_archive.cpp"
+    "vfs/zip_file.cpp"
+    "resource/basic.cpp"
+    "resource/sample.cpp"
+    "decoder/abstract.cpp"
+    "decoder/metadata.cpp"
+    "decoder/wav.cpp"
+    "decoder/flac.cpp"
+    "decoder/vorbis.cpp"
+    "decoder/opus.cpp"
 )

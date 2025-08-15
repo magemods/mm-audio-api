@@ -4,6 +4,7 @@
 #include "dynamicdataarray.h"
 #include "load_status.h"
 #include "heap.h"
+#include "native_bridge.h"
 
 /**
  * This file is responsible for intercepting load requests and returning data from mod memory.
@@ -196,6 +197,17 @@ RECOMP_EXPORT uintptr_t AudioApi_AddDmaCallback(AudioApiDmaCallback callback, u3
     DynDataArr_push(&dmaCallbacks, &entry);
 
     return DMA_CALLBACK_START_DEV_ADDR + id;
+}
+
+RECOMP_EXPORT s32 AudioApi_NativeDmaCallback(void* ramAddr, size_t size, size_t offset, u32 arg0, u32 arg1, u32 arg2) {
+    DmaRequestArgs args = { arg0, arg1, arg2 };
+
+    if (!AudioApiNative_Dma(ramAddr, size, offset, &args)) {
+        recomp_printf("BAD\n");
+        return -1;
+    }
+
+    return 0;
 }
 
 s32 AudioApi_Dma_Callback(uintptr_t devAddr, void* ramAddr, size_t size, size_t offset) {
