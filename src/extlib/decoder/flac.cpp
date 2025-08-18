@@ -16,6 +16,8 @@ void Flac::open() {
 
     std::unique_lock<std::mutex> lock(mutex);
 
+    static bool firstOpen = true;
+
     decoder = firstOpen
         ? drflac_open_with_metadata(Flac::onRead, Flac::onSeek, Flac::onTell, Flac::onMeta, this, nullptr)
         : drflac_open(Flac::onRead, Flac::onSeek, Flac::onTell, this, nullptr);
@@ -23,6 +25,8 @@ void Flac::open() {
     if (!decoder) {
         throw std::runtime_error("Decoder error: failed to open decoder");
     }
+
+    firstOpen = false;
 }
 
 void Flac::close() {

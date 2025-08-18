@@ -1,0 +1,172 @@
+#include <global.h>
+#include <recomp/modding.h>
+#include <recomp/recomputils.h>
+
+#include <audio_api/types.h>
+#include <audio_api/sequence.h>
+#include <audio_api/soundfont.h>
+#include <audio_api/cseq.h>
+
+RECOMP_IMPORT(".", bool AudioApiNative_AddAudioFile(AudioApiFileInfo* info, char* dir, char* filename));
+RECOMP_IMPORT(".", uintptr_t AudioApi_AddDmaCallback(AudioApiDmaCallback callback, u32 arg0, u32 arg1, u32 arg2));
+RECOMP_IMPORT(".", s32 AudioApi_NativeDmaCallback(void* ramAddr, size_t size, size_t offset, u32 arg0, u32 arg1, u32 arg2));
+
+RECOMP_EXPORT bool AudioApi_AddAudioFile(AudioApiFileInfo* info, char* dir, char* filename) {
+    AudioApiFileInfo defaultInfo = {0};
+
+    if (info == NULL) {
+        info = &defaultInfo;
+    }
+
+    return AudioApiNative_AddAudioFile(info, dir, filename);
+}
+
+RECOMP_EXPORT uintptr_t AudioApi_GetAudioFileDevAddr(u32 resourceId, u32 trackNo) {
+    return AudioApi_AddDmaCallback(AudioApi_NativeDmaCallback, resourceId, trackNo, 0);
+}
+
+RECOMP_EXPORT s32 AudioApi_AddStreamedSequence(AudioApiFileInfo* info, char* dir, char* filename) {
+    AudioApiFileInfo defaultInfo = {0};
+    u32 channelCount, trackCount;
+    u32 channelNo, trackNo;
+    s32 seqId, fontId;
+    uintptr_t sampleAddr;
+    AdpcmLoop sampleLoop;
+    Sample sample;
+    Instrument inst;
+    size_t seqSize;
+    u8* seqData;
+    AudioTableEntry entry;
+    CSeqContainer* root;
+    CSeqSection* seq;
+    CSeqSection* chan;
+    CSeqSection* layer;
+    CSeqSection* label;
+
+    if (info == NULL) {
+        info = &defaultInfo;
+    }
+
+    if (!AudioApiNative_AddAudioFile(info, dir, filename)) {
+        return -1;
+    }
+
+    if (info->channelType == AUDIOAPI_CHANNEL_TYPE_DEFAULT) {
+        info->channelType = info->trackCount & 1
+            ? AUDIOAPI_CHANNEL_TYPE_MONO
+            : AUDIOAPI_CHANNEL_TYPE_STEREO;
+    }
+
+    if (info->channelType == AUDIOAPI_CHANNEL_TYPE_MONO) {
+        trackCount = MIN(info->trackCount, 16);
+        channelCount = trackCount;
+    } else if (info->channelType == AUDIOAPI_CHANNEL_TYPE_STEREO) {
+        trackCount = MIN(info->trackCount, 32);
+        channelCount = trackCount / 2;
+    } else {
+        return -1;
+    }
+
+    fontId = AudioApi_CreateEmptySoundFont();
+
+    for (trackNo = 0; trackNo < trackCount; trackNo++) {
+
+        sampleAddr = AudioApi_GetAudioFileDevAddr(info->resourceId, trackNo);
+
+        sampleLoop = (AdpcmLoop){
+            { info->loopStart, info->loopEnd, info->loopCount, info->sampleCount }, {}
+        };
+
+        sample = (Sample){
+            0, CODEC_S16, MEDIUM_CART, false, false,
+            info->sampleCount * 2,
+            (void*)sampleAddr,
+            &sampleLoop,
+            NULL
+        };
+
+        inst = (Instrument){
+            false,
+            INSTR_SAMPLE_LO_NONE,
+            INSTR_SAMPLE_HI_NONE,
+            251,
+            DefaultEnvelopePoint,
+            INSTR_SAMPLE_NONE,
+            { &sample, info->sampleRate / 32000.0f },
+            INSTR_SAMPLE_NONE,
+        };
+
+        AudioApi_AddInstrument(fontId, &inst);
+    }
+
+
+    root = cseq_create();
+    seq = cseq_sequence_create(root);
+
+    cseq_mutebhv(seq, 0x20);
+    cseq_mutescale(seq, 0x32);
+    cseq_initchan(seq, 1 << (channelCount - 1));
+    label = cseq_label_create(seq);
+
+    for (channelNo = 0; channelNo < channelCount; channelNo++) {
+        chan = cseq_channel_create(root);
+        cseq_ldchan(seq, channelNo, chan);
+        cseq_noshort(chan);
+        cseq_panweight(chan, 0);
+
+        if (info->channelType == AUDIOAPI_CHANNEL_TYPE_MONO) {
+            layer = cseq_layer_create(root);
+            cseq_ldlayer(chan, 0, layer);
+            cseq_instr(layer, channelNo);
+            cseq_notepan(layer, 0);
+            cseq_notedv(layer, PITCH_C4, 0x7FFF, 50);
+            cseq_section_end(layer);
+
+        } else if (info->channelType == AUDIOAPI_CHANNEL_TYPE_STEREO) {
+            layer = cseq_layer_create(root);
+            cseq_ldlayer(chan, 0, layer);
+            cseq_instr(layer, channelNo * 2);
+            cseq_notepan(layer, 0);
+            cseq_notedv(layer, PITCH_C4, 0x7FFF, 50);
+            cseq_section_end(layer);
+
+            layer = cseq_layer_create(root);
+            cseq_ldlayer(chan, 1, layer);
+            cseq_instr(layer, channelNo * 2 + 1);
+            cseq_notepan(layer, 127);
+            cseq_notedv(layer, PITCH_C4, 0x7FFF, 50);
+            cseq_section_end(layer);
+        }
+
+        cseq_delay(chan, 0x7FFF);
+        cseq_section_end(chan);
+    }
+
+    cseq_vol(seq, 0xA0);
+    cseq_tempo(seq, 0x01);
+    cseq_delay(seq, 0x7FFF);
+    cseq_jump(seq, label);
+    cseq_freechan(seq, 1 << (channelCount - 1));
+    cseq_section_end(seq);
+
+    cseq_compile(root, 0);
+
+    seqSize = root->buffer->size;
+    seqData = recomp_alloc(seqSize);
+    Lib_MemCpy(seqData, root->buffer->data, seqSize);
+
+    cseq_destroy(root);
+
+    entry = (AudioTableEntry){
+        (uintptr_t)seqData,
+        seqSize,
+        MEDIUM_CART,
+        CACHE_EITHER,
+        0, 0, 0,
+    };
+
+    seqId = AudioApi_AddSequence(&entry);
+    AudioApi_AddSequenceFont(seqId, fontId);
+
+    return seqId;
+}

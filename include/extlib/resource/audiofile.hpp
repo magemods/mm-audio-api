@@ -14,12 +14,12 @@
 
 namespace Resource {
 
-class Sample : public Abstract {
+class Audiofile : public Abstract {
 public:
-    Sample() = delete;
-    Sample(std::shared_ptr<Vfs::File> file, Decoder::Type type = Decoder::Type::UNK,
-           CacheStrategy cacheStrategy = RESOURCE_CACHE_PRELOAD_ON_USE);
-    ~Sample();
+    Audiofile() = delete;
+    Audiofile(std::shared_ptr<Vfs::File> file, Decoder::Type type = Decoder::Type::Auto,
+              CacheStrategy cacheStrategy = CacheStrategy::Default);
+    ~Audiofile();
 
     void open();
     void close();

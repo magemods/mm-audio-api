@@ -18,9 +18,9 @@ constexpr size_t OGG_BUFFER_SIZE = 4096;
 
 const std::array<std::pair<std::string, Type>, 3> oggHeaderTypes = {
     {
-        {"\x01vorbis", Type::VORBIS},
-        {"OpusHead",   Type::OPUS},
-        {"\x7F""FLAC", Type::FLAC}
+        {"\x01vorbis", Type::Vorbis},
+        {"OpusHead",   Type::Opus},
+        {"\x7F""FLAC", Type::Flac}
     }
 };
 
@@ -32,7 +32,7 @@ Type getOggType(std::shared_ptr<Vfs::File> file) {
     char* buffer;
     size_t bytesRead;
 
-    Type type = Type::UNK;
+    Type type = Type::Auto;
 
     try {
         file->open();
@@ -79,15 +79,15 @@ Type getOggType(std::shared_ptr<Vfs::File> file) {
 }
 
 std::unique_ptr<Abstract> factory(std::shared_ptr<Vfs::File> file, Type type) {
-    if (type == Type::UNK) {
+    if (type == Type::Auto) {
         std::string ext = file->extension();
 
         if (ext == ".wav" || ext == ".aiff") {
-            type = Type::WAV;
+            type = Type::Wav;
         } else if (ext == ".flac") {
-            type = Type::FLAC;
+            type = Type::Flac;
         } else if (ext == ".opus") {
-            type = Type::OPUS;
+            type = Type::Opus;
         } else if (ext == ".ogg") {
             type = getOggType(file);
         } else {
@@ -96,13 +96,13 @@ std::unique_ptr<Abstract> factory(std::shared_ptr<Vfs::File> file, Type type) {
     }
 
     switch (type) {
-    case Type::WAV:
+    case Type::Wav:
         return std::make_unique<Wav>(file);
-    case Type::FLAC:
+    case Type::Flac:
         return std::make_unique<Flac>(file);
-    case Type::VORBIS:
+    case Type::Vorbis:
         return std::make_unique<Vorbis>(file);
-    case Type::OPUS:
+    case Type::Opus:
         return std::make_unique<Opus>(file);
     default:
         throw std::runtime_error("Decoder error: uknown decoder type");

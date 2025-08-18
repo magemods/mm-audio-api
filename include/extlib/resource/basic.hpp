@@ -15,7 +15,7 @@ namespace Resource {
 class Basic : public Abstract {
 public:
     Basic() = delete;
-    Basic(std::shared_ptr<Vfs::File> file, CacheStrategy cacheStrategy = RESOURCE_CACHE_PRELOAD_ON_USE);
+    Basic(std::shared_ptr<Vfs::File> file, CacheStrategy cacheStrategy = CacheStrategy::Default);
 
     ~Basic();
 

@@ -34,7 +34,7 @@ CPPFLAGS := -nostdinc -D_LANGUAGE_C -DMIPS -DF3DEX_GBI_2 -DF3DEX_GBI_PL -DGBI_DO
 LDFLAGS  := -nostdlib -T $(LDSCRIPT) -Map $(BUILD_DIR)/mod.map --unresolved-symbols=ignore-all --emit-relocs -e 0 \
 			--no-nmagic
 
-C_SRCS := $(wildcard src/core/*.c) $(wildcard src/utils/*.c)
+C_SRCS := $(wildcard src/core/*.c) $(wildcard src/porcelain/*.c) $(wildcard src/utils/*.c)
 C_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(C_SRCS))
 C_DEPS := $(patsubst %.c,$(BUILD_DIR)/%.d,$(C_SRCS))
 BUILD_DIRS := $(sort $(dir $(C_OBJS)))

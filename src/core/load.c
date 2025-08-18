@@ -4,7 +4,6 @@
 #include <utils/dynamicdataarray.h>
 #include <core/load_status.h>
 #include <core/heap.h>
-#include <extlib/bridge.h>
 
 /**
  * This file is responsible for intercepting load requests and returning data from mod memory.
@@ -43,6 +42,8 @@ s32 AudioApi_Dma_Callback(uintptr_t devAddr, void* ramAddr, size_t size, size_t 
 
 RECOMP_DECLARE_EVENT(AudioApi_SequenceLoadedInternal(s32 seqId, void** ramAddrPtr));
 RECOMP_DECLARE_EVENT(AudioApi_SoundFontLoadedInternal(s32 fontId, void** ramAddrPtr));
+
+RECOMP_IMPORT(".", bool AudioApiNative_Dma(s16* buf, u32 size, u32 offset, u32* args));
 
 RECOMP_CALLBACK(".", AudioApi_InitInternal) void AudioApi_LoadInit() {
     DynDataArr_init(&dmaCallbacks, sizeof(AudioApiDmaCallbackEntry), DMA_CALLBACK_DEFAULT_CAPACITY);
@@ -200,10 +201,9 @@ RECOMP_EXPORT uintptr_t AudioApi_AddDmaCallback(AudioApiDmaCallback callback, u3
 }
 
 RECOMP_EXPORT s32 AudioApi_NativeDmaCallback(void* ramAddr, size_t size, size_t offset, u32 arg0, u32 arg1, u32 arg2) {
-    DmaRequestArgs args = { arg0, arg1, arg2 };
+    u32 args[] = {arg0, arg1, arg2};
 
-    if (!AudioApiNative_Dma(ramAddr, size, offset, &args)) {
-        recomp_printf("BAD\n");
+    if (!AudioApiNative_Dma(ramAddr, size, offset, args)) {
         return -1;
     }
 

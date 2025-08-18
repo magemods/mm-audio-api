@@ -5,7 +5,6 @@
 #include <utils/queue.h>
 #include <core/heap.h>
 #include <core/load.h>
-#include <extlib/bridge.h>
 
 /**
  * This file is responsible for the main Audio API init process. It patches `AudioLoad_Init()`
@@ -26,6 +25,10 @@ RECOMP_DECLARE_EVENT(AudioApi_ReadyInternal());
 // Public queue events
 RECOMP_DECLARE_EVENT(AudioApi_Init());
 RECOMP_DECLARE_EVENT(AudioApi_Ready());
+
+RECOMP_IMPORT(".", bool AudioApiNative_Init(u32 log_level, unsigned char* mod_dir));
+RECOMP_IMPORT(".", bool AudioApiNative_Ready());
+RECOMP_IMPORT(".", bool AudioApiNative_Tick());
 
 RECOMP_CALLBACK(".", AudioApi_InitInternal) void AudioApi_ExtLibInit() {
     unsigned char* mod_folder = recomp_get_mod_folder_path();

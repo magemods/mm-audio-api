@@ -1,7 +1,7 @@
-#ifndef __MM_CSEQ__
-#define __MM_CSEQ__
+#ifndef __AUDIO_API_CSEQ_H__
+#define __AUDIO_API_CSEQ_H__
 
-/*! \file cseq.h
+/*! \file audio_api/cseq.h
     \version 0.4.0
     \brief Functions for programatically building sequence files
  */
@@ -10,10 +10,7 @@
 #define MML_VERSION_MM   1
 #define MML_VERSION      MML_VERSION_MM
 
-#include "global.h"
-#include "modding.h"
 #include "audio/aseq.h"
-
 
 typedef struct CSeqSection CSeqSection;
 typedef struct CSeqOffsetPatch CSeqOffsetPatch;

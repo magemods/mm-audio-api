@@ -10,10 +10,11 @@
 #include <plog/Formatters/TxtFormatter.h>
 #include <plog/Initializers/ConsoleInitializer.h>
 
+#include <audio_api/types.h>
+
 #include <extlib/lib_recomp.hpp>
-#include <extlib/bridge.h>
 #include <extlib/resource/abstract.hpp>
-#include <extlib/resource/sample.hpp>
+#include <extlib/resource/audiofile.hpp>
 #include <extlib/thread.hpp>
 
 extern "C" {
@@ -32,8 +33,8 @@ std::shared_mutex gResourceDataMutex;
 static plog::ConsoleAppender<plog::TxtFormatter> sConsoleAppender;
 
 RECOMP_DLL_FUNC(AudioApiNative_Init) {
-    uint32_t logLevel = RECOMP_ARG(uint32_t, 0);
-    std::u8string rootDirStr = RECOMP_ARG_U8STR(1);
+    auto logLevel = RECOMP_ARG(uint32_t, 0);
+    auto rootDirStr = RECOMP_ARG_U8STR(1);
 
     try {
         if (sIsInitialized) {
@@ -43,7 +44,7 @@ RECOMP_DLL_FUNC(AudioApiNative_Init) {
         plog::init((plog::Severity)logLevel, &sConsoleAppender);
 
         {
-            auto rootDir = fs::canonical(fs::path(rootDirStr).parent_path().parent_path());
+            auto rootDir = fs::canonical(fs::path(rootDirStr).parent_path());
             auto defaultDir = rootDir / "mod_data" / "audio";
             PLOG_INFO << "Root Dir: " << rootDir;
             PLOG_INFO << "Default Dir: " << defaultDir;
@@ -88,15 +89,15 @@ RECOMP_DLL_FUNC(AudioApiNative_Tick) {
 }
 
 RECOMP_DLL_FUNC(AudioApiNative_Dma) {
-    int32_t ptr = RECOMP_ARG(int32_t, 0);
+    auto ptr = RECOMP_ARG(int32_t, 0);
     size_t count = RECOMP_ARG(uint32_t, 1);
     size_t offset = RECOMP_ARG(uint32_t, 2);
 
-    DmaRequestArgs* args = TO_PTR(DmaRequestArgs, RECOMP_ARG(int32_t, 3));
-    size_t resourceId = args->arg0;
+    auto args = TO_PTR(uint32_t, RECOMP_ARG(int32_t, 3));
+    size_t resourceId = args[0];
 
     try {
-        std::shared_ptr<Resource::Sample> resource;
+        std::shared_ptr<Resource::Audiofile> resource;
         {
             std::shared_lock<std::shared_mutex> lock(gResourceDataMutex);
 
@@ -105,10 +106,10 @@ RECOMP_DLL_FUNC(AudioApiNative_Dma) {
                 throw std::invalid_argument("Invalid resourceId " + std::to_string(resourceId));
             }
 
-            resource = std::static_pointer_cast<Resource::Sample>(it->second);
+            resource = std::static_pointer_cast<Resource::Audiofile>(it->second);
         }
 
-        resource->dma(rdram, ptr, offset, count, args->arg1, args->arg2);
+        resource->dma(rdram, ptr, offset, count, args[1], args[2]);
         queuePreload(resourceId);
 
         RECOMP_RETURN(bool, true);
@@ -128,35 +129,34 @@ RECOMP_DLL_FUNC(AudioApiNative_Dma) {
 
 
 RECOMP_DLL_FUNC(AudioApiNative_AddAudioFile) {
-    AudioFileInfo* info = RECOMP_ARG(AudioFileInfo*, 0);
-    std::u8string baseDir = RECOMP_ARG_U8STR(1);
-    std::u8string path = RECOMP_ARG_U8STR(2);
+    auto info = RECOMP_ARG(AudioApiFileInfo*, 0);
+    auto baseDir = RECOMP_ARG_U8STR(1);
+    auto path = RECOMP_ARG_U8STR(2);
+    auto codec = Decoder::parseType(info->codec);
+    auto cacheStrategy = Resource::parseCacheStrategy(info->cacheStrategy);
 
     try {
         auto file = gVfs.openFile(baseDir, path);
-        auto resource = std::make_shared<Resource::Sample>(file);
+        auto resource = std::make_shared<Resource::Audiofile>(file, codec, cacheStrategy);
 
         if (info->trackCount && info->sampleCount) {
-
+            resource->metadata->setTrackCount(info->trackCount);
+            resource->metadata->setSampleRate(info->sampleRate);
+            resource->metadata->setSampleCount(info->sampleCount);
+            resource->metadata->setLoopInfo(info->loopStart, info->loopEnd, info->loopCount);
+        } else {
+            resource->open();
+            resource->probe();
+            resource->close();
         }
 
-        resource->open();
-        resource->probe();
-        resource->close();
-
         info->resourceId  = sResourceCount++;
-
-        // todo, check if set already, if so not probe
         info->trackCount  = resource->metadata->trackCount;
         info->sampleRate  = resource->metadata->sampleRate;
         info->sampleCount = resource->metadata->sampleCount;
         info->loopStart   = resource->metadata->loopStart;
         info->loopEnd     = resource->metadata->loopEnd;
         info->loopCount   = resource->metadata->loopCount;
-
-        PLOG_DEBUG << "Sample count: " << info->sampleCount;
-        PLOG_DEBUG << "Loop start: " << info->loopStart;
-        PLOG_DEBUG << "Loop end: " << info->loopEnd;
 
         {
             std::unique_lock<std::shared_mutex> lock(gResourceDataMutex);

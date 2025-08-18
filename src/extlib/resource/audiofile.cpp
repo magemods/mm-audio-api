@@ -1,4 +1,4 @@
-#include <extlib/resource/sample.hpp>
+#include <extlib/resource/audiofile.hpp>
 
 #include <algorithm>
 
@@ -19,36 +19,40 @@ inline size_t CHUNK_END(size_t offset) {
     return CHUNK_START(offset) + CHUNK_SIZE;
 }
 
-Sample::Sample(std::shared_ptr<Vfs::File> file, Decoder::Type type, CacheStrategy cacheStrategy)
+Audiofile::Audiofile(std::shared_ptr<Vfs::File> file, Decoder::Type type, CacheStrategy cacheStrategy)
     : file(file), cacheStrategy(cacheStrategy) {
 
     decoder = Decoder::factory(file, type);
     metadata = decoder->metadata;
+
+    if (cacheStrategy == CacheStrategy::Default) {
+        cacheStrategy = CacheStrategy::PreloadOnUse;
+    }
 }
 
-Sample::~Sample() {
+Audiofile::~Audiofile() {
     close();
 }
 
-void Sample::open() {
+void Audiofile::open() {
     file->open();
     decoder->open();
     atime.store(std::chrono::steady_clock::now());
 }
 
-void Sample::close() {
+void Audiofile::close() {
     decoder->close();
     file->close();
     pos.store(0);
     atime.store(EPOCH);
 }
 
-void Sample::probe() {
+void Audiofile::probe() {
     decoder->probe();
     numChunks = (metadata->sampleCount / CHUNK_SIZE) - (metadata->loopStart / CHUNK_SIZE) + 1;
 }
 
-std::shared_ptr<std::vector<int16_t>> Sample::getChunk(size_t offset) {
+std::shared_ptr<std::vector<int16_t>> Audiofile::getChunk(size_t offset) {
     try {
         std::shared_lock<std::shared_mutex> cacheLock(cacheMutex);
         return cache.at(offset);
@@ -73,7 +77,7 @@ std::shared_ptr<std::vector<int16_t>> Sample::getChunk(size_t offset) {
 }
 
 
-void Sample::dma(uint8_t* rdram, int32_t ptr, size_t offset, size_t count, uint32_t trackNo, uint32_t arg2) {
+void Audiofile::dma(uint8_t* rdram, int32_t ptr, size_t offset, size_t count, uint32_t trackNo, uint32_t arg2) {
     if (trackNo >= metadata->trackCount) {
         throw std::invalid_argument("Invalid trackNo " + std::to_string(trackNo));
     }
@@ -96,10 +100,10 @@ void Sample::dma(uint8_t* rdram, int32_t ptr, size_t offset, size_t count, uint3
     pos.store(offset);
 }
 
-std::vector<PreloadTask> Sample::getPreloadTasks() {
+std::vector<PreloadTask> Audiofile::getPreloadTasks() {
     static bool initialPreload = true;
 
-    if (cacheStrategy == RESOURCE_CACHE_NONE) {
+    if (cacheStrategy == CacheStrategy::None) {
         return {};
     }
 
@@ -108,7 +112,7 @@ std::vector<PreloadTask> Sample::getPreloadTasks() {
         return {{ 0, true }};
     }
 
-    if (cacheStrategy == RESOURCE_CACHE_PRELOAD) {
+    if (cacheStrategy == CacheStrategy::Preload) {
         return {};
     }
 
@@ -126,14 +130,14 @@ std::vector<PreloadTask> Sample::getPreloadTasks() {
     return tasks;
 }
 
-void Sample::runPreloadTask(const PreloadTask& task) {
+void Audiofile::runPreloadTask(const PreloadTask& task) {
     if (task.data.type() == typeid(size_t)) {
         size_t offset = std::any_cast<size_t>(task.data);
         getChunk(offset);
         return;
     }
 
-    size_t preloadChunks = cacheStrategy == RESOURCE_CACHE_PRELOAD
+    size_t preloadChunks = cacheStrategy == CacheStrategy::Preload
         ? numChunks
         : CACHE_INITIAL_CHUNKS;
 
@@ -148,7 +152,7 @@ void Sample::runPreloadTask(const PreloadTask& task) {
     close();
 }
 
-void Sample::gc() {
+void Audiofile::gc() {
     auto atime = this->atime.load();
     if (atime == EPOCH) {
         return;
@@ -159,7 +163,7 @@ void Sample::gc() {
         return close();
     }
 
-    if (cacheStrategy == RESOURCE_CACHE_NONE || cacheStrategy == RESOURCE_CACHE_PRELOAD_ON_USE) {
+    if (cacheStrategy == CacheStrategy::None || cacheStrategy == CacheStrategy::PreloadOnUse) {
         std::unique_lock<std::shared_mutex> cacheLock(cacheMutex);
 
         size_t curChunk = pos.load() / CHUNK_SIZE;

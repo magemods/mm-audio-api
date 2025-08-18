@@ -4,11 +4,31 @@
 #include <memory>
 #include <vector>
 
-#include <extlib/bridge.h>
+#include <audio_api/types.h>
 
 namespace Resource {
 
-using CacheStrategy = ResourceCacheStrategy;
+enum class CacheStrategy {
+    Default             = AUDIOAPI_CACHE_DEFAULT,
+    None                = AUDIOAPI_CACHE_NONE,
+    Preload             = AUDIOAPI_CACHE_PRELOAD,
+    PreloadOnUse        = AUDIOAPI_CACHE_PRELOAD_ON_USE,
+    PreloadOnUseNoEvict = AUDIOAPI_CACHE_PRELOAD_ON_USE_NO_EVICT,
+};
+
+inline CacheStrategy parseCacheStrategy(uint32_t val) {
+    auto cacheStrategy = static_cast<CacheStrategy>(val);
+    switch(cacheStrategy) {
+    case CacheStrategy::Default:
+    case CacheStrategy::None:
+    case CacheStrategy::Preload:
+    case CacheStrategy::PreloadOnUse:
+    case CacheStrategy::PreloadOnUseNoEvict:
+        return cacheStrategy;
+    default:
+        return CacheStrategy::Default;
+    }
+}
 
 struct PreloadTask {
     int priority;

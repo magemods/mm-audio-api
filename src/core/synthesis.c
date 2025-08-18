@@ -564,37 +564,37 @@ RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* samp
                         goto skip;
 
                     case CODEC_S16:
-                        AudioSynth_ClearBuffer(cmd++, DMEM_UNCOMPRESSED_NOTE,
-                                               (numSamplesToLoadAdj + SAMPLES_PER_FRAME) * SAMPLE_SIZE);
-
                         // @mod add support for PCM 16
                         // Note that despite being able to load the exact number of samples requested,
                         // we load an extra 16 samples in order to prevent audio crackling.
                         // These extra samples overlap the samples requested in the next update.
-                        sampleDataChunkSize =
-                            MIN(numSamplesToLoadAdj + SAMPLES_PER_FRAME, numSamplesUntilEnd) * SAMPLE_SIZE;
+                        numSamplesToDecode = MIN(numSamplesToProcess + SAMPLES_PER_FRAME, numSamplesUntilEnd);
+
+                        AudioSynth_ClearBuffer(cmd++, DMEM_UNCOMPRESSED_NOTE + dmemUncompressedAddrOffset1,
+                                               numSamplesToDecode * SAMPLE_SIZE);
 
                         if (IS_DMA_CALLBACK_DEV_ADDR(sampleAddr)) {
                             samplesToLoadAddr =
-                                AudioLoad_DmaSampleData((uintptr_t)sampleAddr, sampleDataChunkSize / SAMPLE_SIZE,
-                                                        synthState->samplePosInt,
+                                AudioLoad_DmaSampleData((uintptr_t)(sampleAddr),
+                                                        numSamplesToDecode, synthState->samplePosInt,
                                                         &synthState->sampleDmaIndex, sample->medium);
                         } else {
                             sampleAddrOffset = synthState->samplePosInt * SAMPLE_SIZE;
                             samplesToLoadAddr =
                                 AudioLoad_DmaSampleData((uintptr_t)(sampleAddr + sampleAddrOffset),
-                                                        sampleDataChunkSize, flags,
+                                                        numSamplesToDecode * SAMPLE_SIZE, flags,
                                                         &synthState->sampleDmaIndex, sample->medium);
                         }
 
                         if (samplesToLoadAddr) {
-                            AudioSynth_LoadBuffer(cmd++, DMEM_UNCOMPRESSED_NOTE, sampleDataChunkSize, samplesToLoadAddr);
+                            AudioSynth_LoadBuffer(cmd++, DMEM_UNCOMPRESSED_NOTE + dmemUncompressedAddrOffset1,
+                                                  numSamplesToDecode * SAMPLE_SIZE, samplesToLoadAddr);
                         }
 
                         flags = A_CONTINUE;
                         skipBytes = 0;
-                        numSamplesProcessed = numSamplesToLoadAdj;
-                        dmemUncompressedAddrOffset1 = numSamplesToLoadAdj;
+                        numSamplesProcessed += MIN(numSamplesToProcess, numSamplesUntilEnd);
+                        dmemUncompressedAddrOffset1 += numSamplesProcessed * SAMPLE_SIZE;
                         goto skip;
 
                     default:
@@ -742,7 +742,7 @@ RECOMP_PATCH Acmd* AudioSynth_ProcessSample(s32 noteIndex, NoteSampleState* samp
                     finished = true;
                     note->sampleState.bitField0.finished = true;
                     AudioSynth_DisableSampleStates(updateIndex, noteIndex);
-                    break; // break out of the for-loop
+                    break; // break out of the while loop
                 } else if (loopToPoint) {
                     synthState->atLoopPoint = true;
                     synthState->samplePosInt = loopInfo->header.start;

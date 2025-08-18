@@ -7,7 +7,12 @@ namespace Resource {
 constexpr int FILE_TTL_SECONDS = 30;
 
 Basic::Basic(std::shared_ptr<Vfs::File> file, CacheStrategy cacheStrategy)
-    : file(file), cacheStrategy(cacheStrategy) {}
+    : file(file), cacheStrategy(cacheStrategy) {
+
+    if (cacheStrategy == CacheStrategy::Default) {
+        cacheStrategy = CacheStrategy::PreloadOnUse;
+    }
+}
 
 Basic::~Basic() {
     close();
@@ -52,7 +57,7 @@ void Basic::dma(uint8_t* rdram, int32_t ptr, size_t offset, size_t size, uint32_
         MEM_B(ptr, i) = buffer[i];
     }
 
-    if (cacheStrategy != RESOURCE_CACHE_NONE && offset == 0 && size == file->size()) {
+    if (cacheStrategy != CacheStrategy::None && offset == 0 && size == file->size()) {
         std::unique_lock cacheLock(cacheMutex);
         cache = std::move(buffer);
     }
@@ -61,17 +66,17 @@ void Basic::dma(uint8_t* rdram, int32_t ptr, size_t offset, size_t size, uint32_
 std::vector<PreloadTask> Basic::getPreloadTasks() {
     static bool initialPreload = true;
 
-    if (cacheStrategy == RESOURCE_CACHE_NONE) {
+    if (cacheStrategy == CacheStrategy::None) {
         return {};
     }
 
     if (initialPreload == true) {
         initialPreload = false;
-        if (cacheStrategy == RESOURCE_CACHE_PRELOAD) {
+        if (cacheStrategy == CacheStrategy::Preload) {
             return {{ 0, true }};
         }
-    } else if (cacheStrategy == RESOURCE_CACHE_PRELOAD_ON_USE ||
-               cacheStrategy == RESOURCE_CACHE_PRELOAD_ON_USE_NO_EVICT) {
+    } else if (cacheStrategy == CacheStrategy::PreloadOnUse ||
+               cacheStrategy == CacheStrategy::PreloadOnUseNoEvict) {
         std::shared_lock cacheLock(cacheMutex);
         if (cache.size() == 0) {
             return {{ 0, true }};
@@ -94,7 +99,7 @@ void Basic::gc() {
 
     auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - atime);
     if (elapsed.count() > FILE_TTL_SECONDS) {
-        if (cacheStrategy == RESOURCE_CACHE_PRELOAD_ON_USE) {
+        if (cacheStrategy == CacheStrategy::PreloadOnUse) {
             cache.resize(0);
         }
         return close();

@@ -117,6 +117,22 @@ RECOMP_EXPORT void AudioApi_RestoreSequence(s32 seqId) {
     gAudioCtx.sequenceTable->entries[seqId] = origTable->entries[seqId];
 }
 
+RECOMP_EXPORT s32 AudioApi_GetSequenceFont(s32 seqId, s32 fontNum) {
+    if (seqId >= gAudioCtx.sequenceTable->header.numEntries) {
+        return -1;
+    }
+
+    s32 index = ((u16*)gAudioCtx.sequenceFontTable)[seqId];
+    u8* entry = &gAudioCtx.sequenceFontTable[index];
+    u8 numFonts = entry[0];
+
+    if (fontNum >= numFonts) {
+        return -1;
+    }
+
+    return entry[fontNum + 1];
+}
+
 RECOMP_EXPORT s32 AudioApi_AddSequenceFont(s32 seqId, s32 fontId) {
     if (gAudioApiInitPhase == AUDIOAPI_INIT_NOT_READY) {
         return -1;
@@ -124,6 +140,7 @@ RECOMP_EXPORT s32 AudioApi_AddSequenceFont(s32 seqId, s32 fontId) {
     if (seqId >= gAudioCtx.sequenceTable->header.numEntries) {
         return -1;
     }
+
     s32 index = ((u16*)gAudioCtx.sequenceFontTable)[seqId];
     u8* entry = &gAudioCtx.sequenceFontTable[index];
     u8 numFonts = entry[0];
@@ -135,6 +152,7 @@ RECOMP_EXPORT s32 AudioApi_AddSequenceFont(s32 seqId, s32 fontId) {
     for (s32 i = MAX_FONTS_PER_SEQUENCE; i > 1; i--) {
         entry[i] = entry[i - 1];
     }
+
     entry[1] = fontId;
     entry[0]++;
 
@@ -153,6 +171,7 @@ RECOMP_EXPORT void AudioApi_ReplaceSequenceFont(s32 seqId, s32 fontNum, s32 font
     if (seqId >= gAudioCtx.sequenceTable->header.numEntries || fontNum >= MAX_FONTS_PER_SEQUENCE) {
         return;
     }
+
     s32 index = ((u16*)gAudioCtx.sequenceFontTable)[seqId];
     u8* entry = &gAudioCtx.sequenceFontTable[index];
     u8 numFonts = entry[0];
@@ -160,6 +179,7 @@ RECOMP_EXPORT void AudioApi_ReplaceSequenceFont(s32 seqId, s32 fontNum, s32 font
     if (fontNum >= numFonts || fontNum < 0) {
         return;
     }
+
     entry[numFonts - fontNum] = fontId;
 }
 
@@ -170,18 +190,16 @@ RECOMP_EXPORT void AudioApi_RestoreSequenceFont(s32 seqId, s32 fontNum) {
     if (seqId >= NA_BGM_MAX) {
         return;
     }
-    s32 index;
-    u8* entry;
-    u8 numFonts;
-    u8 origFontId;
 
-    index = ((u16*)gSequenceFontTable)[seqId];
-    entry = &gSequenceFontTable[index];
-    numFonts = entry[0];
+    s32 index = ((u16*)gSequenceFontTable)[seqId];
+    u8* entry = &gSequenceFontTable[index];
+    u8 numFonts = entry[0];
+    u8 origFontId;
 
     if (fontNum >= numFonts) {
         return;
     }
+
     origFontId = entry[fontNum + 1];
 
     index = ((u16*)gAudioCtx.sequenceFontTable)[seqId];

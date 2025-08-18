@@ -4,12 +4,34 @@
 #include <mutex>
 #include <vector>
 
+#include <audio_api/types.h>
+
 #include <extlib/decoder/metadata.hpp>
 #include <extlib/vfs/file.hpp>
 
 namespace Decoder {
 
-enum class Type { UNK, WAV, FLAC, VORBIS, OPUS };
+enum class Type {
+    Auto    = AUDIOAPI_CODEC_AUTO,
+    Wav     = AUDIOAPI_CODEC_WAV,
+    Flac    = AUDIOAPI_CODEC_FLAC,
+    Vorbis  = AUDIOAPI_CODEC_VORBIS,
+    Opus    = AUDIOAPI_CODEC_OPUS,
+};
+
+inline Type parseType(uint32_t val) {
+    auto type = static_cast<Type>(val);
+    switch(type) {
+    case Type::Auto:
+    case Type::Wav:
+    case Type::Flac:
+    case Type::Vorbis:
+    case Type::Opus:
+        return type;
+    default:
+        return Type::Auto;
+    }
+}
 
 class Abstract {
 public:
@@ -28,9 +50,8 @@ protected:
 
     std::mutex mutex;
     std::shared_ptr<Vfs::File> file;
-    bool firstOpen = true;
 };
 
-std::unique_ptr<Abstract> factory(std::shared_ptr<Vfs::File> file, Type type = Type::UNK);
+std::unique_ptr<Abstract> factory(std::shared_ptr<Vfs::File> file, Type type = Type::Auto);
 
 } // namespace Decoder
