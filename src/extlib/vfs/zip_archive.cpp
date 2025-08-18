@@ -1,4 +1,4 @@
-#include "zip_archive.hpp"
+#include <extlib/vfs/zip_archive.hpp>
 
 #define MINIZ_NO_STDIO
 #define MINIZ_NO_DEFLATE_APIS

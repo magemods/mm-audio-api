@@ -1,4 +1,4 @@
-#include "native_file.hpp"
+#include <extlib/vfs/native_file.hpp>
 
 namespace Vfs {
 

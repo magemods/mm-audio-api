@@ -1,8 +1,8 @@
-#include "sample.hpp"
+#include <extlib/resource/sample.hpp>
 
 #include <algorithm>
 
-#include "mod_recomp.h"
+#include <mod_recomp.h>
 
 namespace Resource {
 

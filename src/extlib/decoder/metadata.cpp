@@ -1,4 +1,4 @@
-#include "metadata.hpp"
+#include <extlib/decoder/metadata.hpp>
 
 #include <climits>
 #include <cstring>
@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "util.h"
+#include <extlib/utils.hpp>
 
 namespace Decoder {
 

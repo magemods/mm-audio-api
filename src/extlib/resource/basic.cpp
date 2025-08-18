@@ -1,6 +1,6 @@
-#include "basic.hpp"
+#include <extlib/resource/basic.hpp>
 
-#include "mod_recomp.h"
+#include <mod_recomp.h>
 
 namespace Resource {
 

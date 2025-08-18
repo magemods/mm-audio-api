@@ -1,4 +1,4 @@
-#include "zip_file.hpp"
+#include <extlib/vfs/zip_file.hpp>
 
 namespace Vfs {
 

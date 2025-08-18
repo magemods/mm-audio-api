@@ -1,4 +1,4 @@
-#include "wav.hpp"
+#include <extlib/decoder/wav.hpp>
 
 #include <algorithm>
 #include <map>

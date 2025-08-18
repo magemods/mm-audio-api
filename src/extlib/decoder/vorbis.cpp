@@ -1,4 +1,4 @@
-#include "vorbis.hpp"
+#include <extlib/decoder/vorbis.hpp>
 #include <algorithm>
 
 namespace Decoder {

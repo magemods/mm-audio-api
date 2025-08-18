@@ -1,4 +1,4 @@
-#include "thread.hpp"
+#include <extlib/thread.hpp>
 
 #include <algorithm>
 #include <chrono>
@@ -11,9 +11,9 @@
 
 #include <plog/Log.h>
 
-#include "main.hpp"
-#include "resource/abstract.hpp"
-#include "util.h"
+#include <extlib/main.hpp>
+#include <extlib/resource/abstract.hpp>
+#include <extlib/utils.hpp>
 
 constexpr int GC_INTERVAL_SECONDS = 1;
 

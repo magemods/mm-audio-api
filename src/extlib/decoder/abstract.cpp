@@ -1,4 +1,4 @@
-#include "abstract.hpp"
+#include <extlib/decoder/abstract.hpp>
 
 #include <cstring>
 #include <array>
@@ -7,10 +7,10 @@
 
 #include <ogg/ogg.h>
 
-#include "wav.hpp"
-#include "flac.hpp"
-#include "vorbis.hpp"
-#include "opus.hpp"
+#include <extlib/decoder/wav.hpp>
+#include <extlib/decoder/flac.hpp>
+#include <extlib/decoder/vorbis.hpp>
+#include <extlib/decoder/opus.hpp>
 
 namespace Decoder {
 

@@ -1,4 +1,4 @@
-#include "flac.hpp"
+#include <extlib/decoder/flac.hpp>
 
 #include <cstring>
 #include <algorithm>

@@ -1,7 +1,7 @@
 #pragma once
 
 extern "C" {
-    #include "mod_recomp.h"
+    #include <mod_recomp.h>
     #define RECOMP_API_VERSION 1
     #define TO_PTR(type, var) ((type*)(&rdram[(uint64_t)var - 0xFFFFFFFF80000000]))
     #define PTR(x) int32_t

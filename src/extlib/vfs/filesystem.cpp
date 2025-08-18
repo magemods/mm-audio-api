@@ -1,10 +1,10 @@
-#include "filesystem.hpp"
+#include <extlib/vfs/filesystem.hpp>
 
 #include <fstream>
 #include <vector>
 
-#include "native_file.hpp"
-#include "zip_file.hpp"
+#include <extlib/vfs/native_file.hpp>
+#include <extlib/vfs/zip_file.hpp>
 
 namespace Vfs {
 

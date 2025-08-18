@@ -1,4 +1,4 @@
-#include "main.hpp"
+#include <extlib/main.hpp>
 
 #include <filesystem>
 #include <stdexcept>
@@ -10,11 +10,11 @@
 #include <plog/Formatters/TxtFormatter.h>
 #include <plog/Initializers/ConsoleInitializer.h>
 
-#include "lib_recomp.hpp"
-#include "native_bridge.h"
-#include "resource/abstract.hpp"
-#include "resource/sample.hpp"
-#include "thread.hpp"
+#include <extlib/lib_recomp.hpp>
+#include <extlib/bridge.h>
+#include <extlib/resource/abstract.hpp>
+#include <extlib/resource/sample.hpp>
+#include <extlib/thread.hpp>
 
 extern "C" {
     DLLEXPORT uint32_t recomp_api_version = RECOMP_API_VERSION;
