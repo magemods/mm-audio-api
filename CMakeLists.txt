@@ -1,8 +1,9 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.22)
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
-project(recomp_mod_native_lib)
+project(mm_audio_api)
+set(TARGET_NAME magemods_audio_api)
 
-set(TARGET_NAME ${LIB_NAME})
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -39,10 +40,8 @@ target_link_libraries(${TARGET_NAME}
 
 target_include_directories(${TARGET_NAME}
     PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/extlib
         ${CMAKE_SOURCE_DIR}/offline_build
-        ${CMAKE_SOURCE_DIR}/include/extlib
-        ${CMAKE_SOURCE_DIR}/include/shared
+        ${CMAKE_SOURCE_DIR}/include
         ${CMAKE_SOURCE_DIR}/thirdparty/plog/include
         ${CMAKE_SOURCE_DIR}/thirdparty/dr_libs
         ${CMAKE_SOURCE_DIR}/thirdparty/ogg/include
@@ -55,7 +54,10 @@ add_subdirectory(src/extlib)
 
 set_target_properties(${TARGET_NAME}
     PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/arc
+    PREFIX ""
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
+
+install(TARGETS ${TARGET_NAME} COMPONENT extlib)

@@ -1,0 +1,7 @@
+{
+    "name": "Audio_API",
+    "version_number": "0.4.0",
+    "website_url": "https://github.com/magemods/mm-audio-api",
+    "description": "This is an API for modders that enables easily replacing in-game audio.",
+    "dependencies": []
+}

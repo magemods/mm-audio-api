@@ -4,9 +4,6 @@
 [submodule "mm-decomp"]
 	path = mm-decomp
 	url = https://github.com/zeldaret/mm
-[submodule "N64Recomp"]
-	path = N64Recomp
-	url = https://github.com/N64Recomp/N64Recomp.git
 [submodule "thirdparty/plog"]
 	path = thirdparty/plog
 	url = https://github.com/SergiusTheBest/plog.git
