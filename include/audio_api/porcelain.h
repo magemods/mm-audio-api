@@ -8,6 +8,9 @@
 
 #include "types.h"
 
+RECOMP_IMPORT("magemods_audio_api", bool AudioApi_AddResource(AudioApiResourceInfo* info, char* dir, char* filename));
+RECOMP_IMPORT("magemods_audio_api", uintptr_t AudioApi_GetResourceDevAddr(u32 resourceId));
+
 RECOMP_IMPORT("magemods_audio_api", bool AudioApi_AddAudioFile(AudioApiFileInfo* info, char* dir, char* filename));
 RECOMP_IMPORT("magemods_audio_api", uintptr_t AudioApi_GetAudioFileDevAddr(u32 resourceId, u32 trackNo));
 RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_AddStreamedSequence(AudioApiFileInfo* info, char* dir, char* filename));

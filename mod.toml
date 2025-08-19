@@ -45,6 +45,7 @@ native_libraries = [
         "AudioApiNative_Ready",
         "AudioApiNative_Tick",
         "AudioApiNative_Dma",
+        "AudioApiNative_AddResource",
         "AudioApiNative_AddAudioFile",
     ] }
 ]

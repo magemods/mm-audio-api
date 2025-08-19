@@ -5,6 +5,7 @@
 
 #include <extlib/vfs/native_file.hpp>
 #include <extlib/vfs/zip_file.hpp>
+#include <extlib/utils.hpp>
 
 namespace Vfs {
 
@@ -36,12 +37,12 @@ bool Filesystem::isPathAllowed(fs::path path) {
 }
 
 void Filesystem::addKnownZipExtension(std::string ext) {
-    knownZipExtensions.insert(ext);
+    knownZipExtensions.insert(lowercase(ext));
 }
 
 bool Filesystem::isZipFile(fs::path path) {
     auto ext = path.extension().string();
-    if (knownZipExtensions.contains(ext)) {
+    if (knownZipExtensions.contains(lowercase(ext))) {
         return true;
     }
 

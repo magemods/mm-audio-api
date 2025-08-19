@@ -1,4 +1,4 @@
-#include <extlib/resource/basic.hpp>
+#include <extlib/resource/generic.hpp>
 
 #include <mod_recomp.h>
 
@@ -6,7 +6,7 @@ namespace Resource {
 
 constexpr int FILE_TTL_SECONDS = 30;
 
-Basic::Basic(std::shared_ptr<Vfs::File> file, CacheStrategy cacheStrategy)
+Generic::Generic(std::shared_ptr<Vfs::File> file, CacheStrategy cacheStrategy)
     : file(file), cacheStrategy(cacheStrategy) {
 
     if (cacheStrategy == CacheStrategy::Default) {
@@ -14,21 +14,21 @@ Basic::Basic(std::shared_ptr<Vfs::File> file, CacheStrategy cacheStrategy)
     }
 }
 
-Basic::~Basic() {
+Generic::~Generic() {
     close();
 }
 
-void Basic::open() {
+void Generic::open() {
     file->open();
     atime.store(std::chrono::steady_clock::now());
 }
 
-void Basic::close() {
+void Generic::close() {
     file->close();
     atime.store(EPOCH);
 }
 
-std::vector<uint8_t> Basic::read(size_t offset, size_t size) {
+std::vector<uint8_t> Generic::read(size_t offset, size_t size) {
     std::vector<uint8_t> buffer(size);
 
     open();
@@ -38,7 +38,7 @@ std::vector<uint8_t> Basic::read(size_t offset, size_t size) {
     return buffer;
 }
 
-void Basic::dma(uint8_t* rdram, int32_t ptr, size_t offset, size_t size, uint32_t arg1, uint32_t arg2) {
+void Generic::dma(uint8_t* rdram, int32_t ptr, size_t offset, size_t size, uint32_t arg1, uint32_t arg2) {
     {
         std::shared_lock cacheLock(cacheMutex);
 
@@ -46,9 +46,9 @@ void Basic::dma(uint8_t* rdram, int32_t ptr, size_t offset, size_t size, uint32_
             for (size_t i = 0; i < size; i++) {
                 MEM_B(ptr, i) = cache[offset + i];
             }
-        }
 
-        return;
+            return;
+        }
     }
 
     std::vector<uint8_t> buffer = read(offset, size);
@@ -57,13 +57,13 @@ void Basic::dma(uint8_t* rdram, int32_t ptr, size_t offset, size_t size, uint32_
         MEM_B(ptr, i) = buffer[i];
     }
 
-    if (cacheStrategy != CacheStrategy::None && offset == 0 && size == file->size()) {
+    if (cacheStrategy != CacheStrategy::None && offset == 0 && size >= file->size()) {
         std::unique_lock cacheLock(cacheMutex);
         cache = std::move(buffer);
     }
 }
 
-std::vector<PreloadTask> Basic::getPreloadTasks() {
+std::vector<PreloadTask> Generic::getPreloadTasks() {
     static bool initialPreload = true;
 
     if (cacheStrategy == CacheStrategy::None) {
@@ -77,21 +77,25 @@ std::vector<PreloadTask> Basic::getPreloadTasks() {
         }
     } else if (cacheStrategy == CacheStrategy::PreloadOnUse ||
                cacheStrategy == CacheStrategy::PreloadOnUseNoEvict) {
-        std::shared_lock cacheLock(cacheMutex);
-        if (cache.size() == 0) {
-            return {{ 0, true }};
-        }
+        return {{ 0, true }};
     }
 
     return {};
 }
 
-void Basic::runPreloadTask(const PreloadTask& task) {
+void Generic::runPreloadTask(const PreloadTask& task) {
+    {
+        std::shared_lock cacheLock(cacheMutex);
+        if (cache.size() >= file->size()) {
+            return;
+        }
+    }
+
     std::unique_lock cacheLock(cacheMutex);
     cache = std::move(read(0, file->size()));
 }
 
-void Basic::gc() {
+void Generic::gc() {
     auto atime = this->atime.load();
     if (atime == EPOCH) {
         return;

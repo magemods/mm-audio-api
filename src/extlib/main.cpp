@@ -15,6 +15,7 @@
 #include <extlib/lib_recomp.hpp>
 #include <extlib/resource/abstract.hpp>
 #include <extlib/resource/audiofile.hpp>
+#include <extlib/resource/generic.hpp>
 #include <extlib/thread.hpp>
 
 extern "C" {
@@ -90,14 +91,14 @@ RECOMP_DLL_FUNC(AudioApiNative_Tick) {
 
 RECOMP_DLL_FUNC(AudioApiNative_Dma) {
     auto ptr = RECOMP_ARG(int32_t, 0);
-    size_t count = RECOMP_ARG(uint32_t, 1);
+    size_t size = RECOMP_ARG(uint32_t, 1);
     size_t offset = RECOMP_ARG(uint32_t, 2);
 
     auto args = TO_PTR(uint32_t, RECOMP_ARG(int32_t, 3));
     size_t resourceId = args[0];
 
     try {
-        std::shared_ptr<Resource::Audiofile> resource;
+        std::shared_ptr<Resource::Abstract> resource;
         {
             std::shared_lock<std::shared_mutex> lock(gResourceDataMutex);
 
@@ -106,10 +107,10 @@ RECOMP_DLL_FUNC(AudioApiNative_Dma) {
                 throw std::invalid_argument("Invalid resourceId " + std::to_string(resourceId));
             }
 
-            resource = std::static_pointer_cast<Resource::Audiofile>(it->second);
+            resource = std::static_pointer_cast<Resource::Abstract>(it->second);
         }
 
-        resource->dma(rdram, ptr, offset, count, args[1], args[2]);
+        resource->dma(rdram, ptr, offset, size, args[1], args[2]);
         queuePreload(resourceId);
 
         RECOMP_RETURN(bool, true);
@@ -127,6 +128,42 @@ RECOMP_DLL_FUNC(AudioApiNative_Dma) {
     RECOMP_RETURN(bool, false);
 }
 
+RECOMP_DLL_FUNC(AudioApiNative_AddResource) {
+    auto info = RECOMP_ARG(AudioApiResourceInfo*, 0);
+    auto baseDir = RECOMP_ARG_U8STR(1);
+    auto path = RECOMP_ARG_U8STR(2);
+    auto cacheStrategy = Resource::parseCacheStrategy(info->cacheStrategy);
+
+    try {
+        // TODO: if info->filesize exists, avoid opening file and just check that it exists
+        auto file = gVfs.openFile(baseDir, path);
+        auto resource = std::make_shared<Resource::Generic>(file, cacheStrategy);
+
+        info->resourceId = sResourceCount++;
+        info->filesize = resource->size();
+        file->close();
+
+        {
+            std::unique_lock<std::shared_mutex> lock(gResourceDataMutex);
+            gResourceData[info->resourceId] = std::move(resource);
+        }
+
+        queuePreload(info->resourceId);
+
+        RECOMP_RETURN(bool, true);
+
+    } catch (const fs::filesystem_error& e) {
+        PLOG_ERROR << "Error adding resource: " << e.what();
+    } catch (const std::invalid_argument& e) {
+        PLOG_ERROR << "Error adding resource: " << e.what();
+    } catch (const std::runtime_error& e) {
+        PLOG_ERROR << "Error adding resource: " << e.what();
+    } catch (...) {
+        PLOG_ERROR << "Error adding resource: Unknown error";
+    }
+
+    RECOMP_RETURN(bool, false);
+}
 
 RECOMP_DLL_FUNC(AudioApiNative_AddAudioFile) {
     auto info = RECOMP_ARG(AudioApiFileInfo*, 0);
@@ -144,6 +181,7 @@ RECOMP_DLL_FUNC(AudioApiNative_AddAudioFile) {
             resource->metadata->setSampleRate(info->sampleRate);
             resource->metadata->setSampleCount(info->sampleCount);
             resource->metadata->setLoopInfo(info->loopStart, info->loopEnd, info->loopCount);
+            file->close();
         } else {
             resource->open();
             resource->probe();

@@ -5,7 +5,7 @@ target_sources(${TARGET_NAME} PUBLIC
     "vfs/native_file.cpp"
     "vfs/zip_archive.cpp"
     "vfs/zip_file.cpp"
-    "resource/basic.cpp"
+    "resource/generic.cpp"
     "resource/audiofile.cpp"
     "decoder/abstract.cpp"
     "decoder/metadata.cpp"

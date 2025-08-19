@@ -27,7 +27,7 @@ typedef enum {
     SEQCMD_EXTENDED_OP_SETUP_CMD = 0x1C,
 } SeqCmdExtendedOp;
 
-typedef enum {                              // Note: specific implementation may vary by resource type
+typedef enum : u32 {                        // Note: specific implementation may vary by resource type
     AUDIOAPI_CACHE_DEFAULT,                 // Resource will assign a default value
     AUDIOAPI_CACHE_NONE,                    // Do not cache
     AUDIOAPI_CACHE_PRELOAD,                 // Preload entire file
@@ -35,16 +35,15 @@ typedef enum {                              // Note: specific implementation may
     AUDIOAPI_CACHE_PRELOAD_ON_USE_NO_EVICT, // Preload upon DMA request and never evict from cache
 } AudioApiCacheStrategy;
 
-typedef enum {
+typedef enum : u32 {
     AUDIOAPI_CODEC_AUTO,
     AUDIOAPI_CODEC_WAV,
     AUDIOAPI_CODEC_FLAC,
     AUDIOAPI_CODEC_VORBIS,
     AUDIOAPI_CODEC_OPUS,
-    AUDIOAPI_CODEC_MAX = 0xFFFFFFFF,
 } AudioApiCodec;
 
-typedef enum {
+typedef enum : u32 {
     AUDIOAPI_CHANNEL_TYPE_DEFAULT,
     AUDIOAPI_CHANNEL_TYPE_MONO,
     AUDIOAPI_CHANNEL_TYPE_STEREO,
@@ -62,5 +61,11 @@ typedef struct AudioApiFileInfo {
     AudioApiChannelType channelType;
     AudioApiCacheStrategy cacheStrategy;
 } AudioApiFileInfo;
+
+typedef struct AudioApiResourceInfo {
+    u32 resourceId;
+    u32 filesize;
+    AudioApiCacheStrategy cacheStrategy;
+} AudioApiResourceInfo;
 
 #endif
