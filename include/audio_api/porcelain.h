@@ -15,6 +15,8 @@ RECOMP_IMPORT("magemods_audio_api", bool AudioApi_AddSampleBankFromFs(AudioApiSa
 RECOMP_IMPORT("magemods_audio_api", bool AudioApi_AddAudioFileFromFs(AudioApiFileInfo* info, char* dir, char* filename));
 RECOMP_IMPORT("magemods_audio_api", uintptr_t AudioApi_GetResourceDevAddr(u32 resourceId));
 
-RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_CreateStreamedSequence(AudioApiFileInfo* info, char* dir, char* filename));
+RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_CreateStreamedSequence(AudioApiFileInfo* info));
+RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_CreateStreamedBgm(AudioApiFileInfo* info, char* dir, char* filename));
+RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_CreateStreamedFanfare(AudioApiFileInfo* info, char* dir, char* filename));
 
 #endif

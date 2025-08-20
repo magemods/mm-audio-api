@@ -9,6 +9,16 @@
 #include "command_macros_base.h"
 #include "types.h"
 
+#define SEQ_FLAG_ASYNC 0x8000
+#define SEQ_FLAG_ENEMY (1 << 0)
+#define SEQ_FLAG_FANFARE (1 << 1)
+#define SEQ_FLAG_FANFARE_KAMARO (1 << 2)
+#define SEQ_FLAG_RESTORE (1 << 3)
+#define SEQ_FLAG_RESUME (1 << 4)
+#define SEQ_FLAG_RESUME_PREV (1 << 5)
+#define SEQ_FLAG_SKIP_HARP_INTRO (1 << 6)
+#define SEQ_FLAG_NO_AMBIENCE (1 << 7)
+
 /**
  * These are the imports that most mods will use, but more imports are available.
  */
@@ -40,7 +50,6 @@ RECOMP_IMPORT("magemods_audio_api", void AudioApi_QueueExtendedSeqCmd(u32 op, u3
  * Extended AudioSeq commands to support more than 256 sequences
  */
 #define SEQCMD_ALL_MASK SEQCMD_OP_MASK | SEQCMD_ASYNC_ACTIVE | SEQCMD_SEQPLAYER_MASK | SEQCMD_SEQID_MASK
-#define SEQ_FLAG_ASYNC 0x8000
 
 /**
  * Play a sequence on a given seqPlayer

@@ -10,11 +10,11 @@
 RECOMP_IMPORT(".", s32 AudioApi_AddAudioFileFromFs(AudioApiFileInfo* info, char* dir, char* filename));
 RECOMP_IMPORT(".", uintptr_t AudioApi_GetResourceDevAddr(u32 resourceId, u32 arg1, u32 arg2));
 
-RECOMP_EXPORT s32 AudioApi_CreateStreamedSequence(AudioApiFileInfo* info, char* dir, char* filename) {
-    AudioApiFileInfo defaultInfo = {0};
+RECOMP_EXPORT s32 AudioApi_CreateStreamedSequence(AudioApiFileInfo* info) {
     u32 channelCount, trackCount;
     u32 channelNo, trackNo;
     s32 seqId, fontId;
+    u16 length;
     uintptr_t sampleAddr;
     AdpcmLoop sampleLoop;
     Sample sample;
@@ -29,17 +29,7 @@ RECOMP_EXPORT s32 AudioApi_CreateStreamedSequence(AudioApiFileInfo* info, char* 
     CSeqSection* label;
 
     if (info == NULL) {
-        info = &defaultInfo;
-    }
-
-    if (!AudioApi_AddAudioFileFromFs(info, dir, filename)) {
         return -1;
-    }
-
-    if (info->channelType == AUDIOAPI_CHANNEL_TYPE_DEFAULT) {
-        info->channelType = info->trackCount & 1
-            ? AUDIOAPI_CHANNEL_TYPE_MONO
-            : AUDIOAPI_CHANNEL_TYPE_STEREO;
     }
 
     if (info->channelType == AUDIOAPI_CHANNEL_TYPE_MONO) {
@@ -84,6 +74,12 @@ RECOMP_EXPORT s32 AudioApi_CreateStreamedSequence(AudioApiFileInfo* info, char* 
         AudioApi_AddInstrument(fontId, &inst);
     }
 
+    if (info->loopCount == -1) {
+        length = 0x7FFF;
+    } else {
+        length = (info->loopCount + 1) * ((f32)info->sampleCount / info->sampleRate) * (TATUMS_PER_BEAT / 60.0f);
+        length = CLAMP(length, 0, 0x7FFF);
+    }
 
     root = cseq_create();
     seq = cseq_sequence_create(root);
@@ -104,7 +100,7 @@ RECOMP_EXPORT s32 AudioApi_CreateStreamedSequence(AudioApiFileInfo* info, char* 
             cseq_ldlayer(chan, 0, layer);
             cseq_instr(layer, channelNo);
             cseq_notepan(layer, 0);
-            cseq_notedv(layer, PITCH_C4, 0x7FFF, 50);
+            cseq_notedv(layer, PITCH_C4, length, 50);
             cseq_section_end(layer);
 
         } else if (info->channelType == AUDIOAPI_CHANNEL_TYPE_STEREO) {
@@ -112,25 +108,29 @@ RECOMP_EXPORT s32 AudioApi_CreateStreamedSequence(AudioApiFileInfo* info, char* 
             cseq_ldlayer(chan, 0, layer);
             cseq_instr(layer, channelNo * 2);
             cseq_notepan(layer, 0);
-            cseq_notedv(layer, PITCH_C4, 0x7FFF, 50);
+            cseq_notedv(layer, PITCH_C4, length, 50);
             cseq_section_end(layer);
 
             layer = cseq_layer_create(root);
             cseq_ldlayer(chan, 1, layer);
             cseq_instr(layer, channelNo * 2 + 1);
             cseq_notepan(layer, 127);
-            cseq_notedv(layer, PITCH_C4, 0x7FFF, 50);
+            cseq_notedv(layer, PITCH_C4, length, 50);
             cseq_section_end(layer);
         }
 
-        cseq_delay(chan, 0x7FFF);
+        cseq_delay(chan, length);
         cseq_section_end(chan);
     }
 
     cseq_vol(seq, 0xA0);
     cseq_tempo(seq, 0x01);
-    cseq_delay(seq, 0x7FFF);
-    cseq_jump(seq, label);
+    cseq_delay(seq, length);
+
+    if (info->loopCount == -1) {
+        cseq_jump(seq, label);
+    }
+
     cseq_freechan(seq, 1 << (channelCount - 1));
     cseq_section_end(seq);
 
@@ -152,6 +152,58 @@ RECOMP_EXPORT s32 AudioApi_CreateStreamedSequence(AudioApiFileInfo* info, char* 
 
     seqId = AudioApi_AddSequence(&entry);
     AudioApi_AddSequenceFont(seqId, fontId);
+
+    return seqId;
+}
+
+RECOMP_EXPORT s32 AudioApi_CreateStreamedBgm(AudioApiFileInfo* info, char* dir, char* filename) {
+    AudioApiFileInfo defaultInfo = {0};
+
+    if (info == NULL) {
+        info = &defaultInfo;
+    }
+
+    if (!AudioApi_AddAudioFileFromFs(info, dir, filename)) {
+        return -1;
+    }
+
+    if (info->channelType == AUDIOAPI_CHANNEL_TYPE_DEFAULT) {
+        info->channelType = info->trackCount & 1
+            ? AUDIOAPI_CHANNEL_TYPE_MONO
+            : AUDIOAPI_CHANNEL_TYPE_STEREO;
+    }
+
+    info->loopCount = -1;
+
+    return AudioApi_CreateStreamedSequence(info);
+}
+
+RECOMP_EXPORT s32 AudioApi_CreateStreamedFanfare(AudioApiFileInfo* info, char* dir, char* filename) {
+    AudioApiFileInfo defaultInfo = {0};
+    s32 seqId;
+
+    if (info == NULL) {
+        info = &defaultInfo;
+    }
+
+    if (!AudioApi_AddAudioFileFromFs(info, dir, filename)) {
+        return -1;
+    }
+
+    if (info->channelType == AUDIOAPI_CHANNEL_TYPE_DEFAULT) {
+        info->channelType = info->trackCount & 1
+            ? AUDIOAPI_CHANNEL_TYPE_MONO
+            : AUDIOAPI_CHANNEL_TYPE_STEREO;
+    }
+
+    info->loopCount = 0;
+
+    seqId = AudioApi_CreateStreamedSequence(info);
+    if (seqId == -1) {
+        return -1;
+    }
+
+    AudioApi_SetSequenceFlags(seqId, SEQ_FLAG_FANFARE);
 
     return seqId;
 }
