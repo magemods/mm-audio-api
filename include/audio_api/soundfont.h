@@ -15,6 +15,26 @@ static EnvelopePoint DefaultEnvelopePoint[] = {
     ENVELOPE_HANG(),
 };
 
+typedef enum SoundFontType : u8 {
+    SOUNDFONT_VANILLA = 0,
+    SOUNDFONT_CUSTOM,
+} SoundFontType;
+
+typedef struct CustomSoundFont {
+    SoundFontType type;
+    u16 sampleBank1;
+    u16 sampleBank2;
+    u8 numInstruments;
+    u8 numDrums;
+    u16 numSfx;
+    u8 instrumentsCapacity;
+    u8 drumsCapacity;
+    u16 sfxCapacity;
+    Instrument** instruments;
+    Drum** drums;
+    SoundEffect* soundEffects;
+} CustomSoundFont;
+
 RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_CreateEmptySoundFont());
 RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_ImportVanillaSoundFont(uintptr_t* fontData, u8 sampleBank1, u8 sampleBank2, u8 numInstruments, u8 numDrums, u16 numSfx));
 
