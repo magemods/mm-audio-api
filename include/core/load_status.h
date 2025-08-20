@@ -11,6 +11,7 @@ typedef enum {
 } SlowLoadStatus;
 
 extern u8* sExtSeqLoadStatus;
+extern u8* sExtSoundFontLoadStatus;
 
 s32 AudioApi_GetTableEntryLoadStatus(s32 tableType, s32 id);
 void AudioApi_SetTableEntryLoadStatus(s32 tableType, s32 id, s32 status);

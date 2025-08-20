@@ -8,6 +8,7 @@
 #include <core/heap.h>
 #include <core/init.h>
 #include <core/load.h>
+#include <core/load_status.h>
 
 /**
  * This file provides the public API for creating and modifying soundfont data
@@ -19,11 +20,13 @@
  */
 
 #define NA_SOUNDFONT_MAX 0x28 // Number of vanilla soundfonts
+#define SOUNDFONT_DEFAULT_SAMPLEBANK_1 1
+#define SOUNDFONT_DEFAULT_SAMPLEBANK_2 255
 #define SOUNDFONT_MAX_INSTRUMENTS 126
-#define SOUNDFONT_MAX_DRUMS 2048
+#define SOUNDFONT_MAX_DRUMS 256
 #define SOUNDFONT_MAX_SFX 2048
-#define SOUNDFONT_DEFAULT_INSTRUMENT_CAPACITY 32
-#define SOUNDFONT_DEFAULT_DRUM_CAPACITY 32
+#define SOUNDFONT_DEFAULT_INSTRUMENT_CAPACITY 16
+#define SOUNDFONT_DEFAULT_DRUM_CAPACITY 16
 #define SOUNDFONT_DEFAULT_SFX_CAPACITY 8
 
 // Relocate an offset (relative to the start of the font data) to a pointer (a ram address)
@@ -55,7 +58,7 @@ u16 soundFontTableCapacity = NA_SOUNDFONT_MAX;
 
 void AudioApi_SoundFontQueueDrain(RecompQueueCmd* cmd);
 void AudioLoad_RelocateSample(TunedSample* tunedSample, void* fontData, SampleBankRelocInfo* sampleBankReloc);
-bool AudioApi_GrowSoundFontTable();
+bool AudioApi_GrowSoundFontTables();
 bool AudioApi_GrowInstrumentList(CustomSoundFont** soundFontPtr);
 bool AudioApi_GrowDrumList(CustomSoundFont* soundFont);
 bool AudioApi_GrowSoundEffectList(CustomSoundFont* soundFont);
@@ -63,11 +66,13 @@ Drum* AudioApi_CopyDrum(Drum* src);
 SoundEffect* AudioApi_CopySoundEffect(SoundEffect* src);
 Instrument* AudioApi_CopyInstrument(Instrument* src);
 Sample* AudioApi_CopySample(Sample* src);
+void AudioApi_FreeSoundFont(CustomSoundFont* soundFont);
 void AudioApi_FreeDrum(Drum* drum);
 void AudioApi_FreeSoundEffect(SoundEffect* sfx);
 void AudioApi_FreeInstrument(Instrument* instrument);
 void AudioApi_FreeSample(Sample* sample);
 
+extern void AudioLoad_InitSoundFont(s32 fontId);
 extern u32 AudioLoad_GetRealTableIndex(s32 tableType, u32 id);
 
 RECOMP_DECLARE_EVENT(AudioApi_SoundFontLoaded(s32 fontId, u8* ramAddr));
@@ -76,10 +81,18 @@ RECOMP_DECLARE_EVENT(AudioApi_SoundFontLoaded(s32 fontId, u8* ramAddr));
 RECOMP_CALLBACK(".", AudioApi_InitInternal) void AudioApi_SoundFontInit() {
     // Queue for the init phase so that mods can register data in the correct order
     soundFontInitQueue = RecompQueue_Create();
+
     // Queue for when ROM soundfonts are actually loaded in order to apply our changes
     soundFontLoadQueue = RecompQueue_Create();
+
     // Hashmap to detect duplicate sample structs before copy
     sampleHashmap = recomputil_create_u32_value_hashmap();
+
+    // Initialize vanillla soundfont list
+    gAudioCtx.soundFontList = recomp_alloc(soundFontTableCapacity * sizeof(SoundFont));
+    for (u32 i = 0; i < soundFontTableCapacity; i++) {
+        AudioLoad_InitSoundFont(i);
+    }
 }
 
 RECOMP_CALLBACK(".", AudioApi_ReadyInternal) void AudioApi_SoundFontReady() {
@@ -91,15 +104,27 @@ RECOMP_EXPORT s32 AudioApi_AddSoundFont(AudioTableEntry* entry) {
     if (gAudioApiInitPhase == AUDIOAPI_INIT_NOT_READY) {
         return -1;
     }
+
     // Find the next available font ID
     s32 newFontId = gAudioCtx.soundFontTable->header.numEntries;
     if (newFontId >= soundFontTableCapacity) {
-        if (!AudioApi_GrowSoundFontTable()) {
+        if (!AudioApi_GrowSoundFontTables()) {
             return -1;
         }
     }
-    gAudioCtx.soundFontTable->header.numEntries = newFontId + 1;
+
+    gAudioCtx.soundFontTable->header.numEntries++;
     gAudioCtx.soundFontTable->entries[newFontId] = *entry;
+
+    CustomSoundFont* soundFont = (CustomSoundFont*)entry->romAddr;
+    if (IS_KSEG0(entry->romAddr) && soundFont->type == SOUNDFONT_CUSTOM) {
+        entry->shortData1 = (soundFont->sampleBank1 << 8) & soundFont->sampleBank2;
+        entry->shortData2 = (soundFont->numInstruments << 8) & soundFont->numDrums;
+        entry->shortData3 = soundFont->numSfx;
+    }
+
+    AudioLoad_InitSoundFont(newFontId);
+
     return newFontId;
 }
 
@@ -120,7 +145,17 @@ RECOMP_EXPORT void AudioApi_ReplaceSoundFont(s32 fontId, AudioTableEntry* entry)
     if (fontId >= gAudioCtx.soundFontTable->header.numEntries) {
         return;
     }
+
     gAudioCtx.soundFontTable->entries[fontId] = *entry;
+
+    CustomSoundFont* soundFont = (CustomSoundFont*)entry->romAddr;
+    if (IS_KSEG0(entry->romAddr) && soundFont->type == SOUNDFONT_CUSTOM) {
+        entry->shortData1 = (soundFont->sampleBank1 << 8) & soundFont->sampleBank2;
+        entry->shortData2 = (soundFont->numInstruments << 8) & soundFont->numDrums;
+        entry->shortData3 = soundFont->numSfx;
+    }
+
+    AudioLoad_InitSoundFont(fontId);
 }
 
 RECOMP_EXPORT void AudioApi_RestoreSoundFont(s32 fontId) {
@@ -130,24 +165,34 @@ RECOMP_EXPORT void AudioApi_RestoreSoundFont(s32 fontId) {
     if (fontId >= gSoundFontTable.header.numEntries) {
         return;
     }
+
     gAudioCtx.soundFontTable->entries[fontId] = gSoundFontTable.entries[fontId];
+    AudioLoad_InitSoundFont(fontId);
 }
 
-RECOMP_EXPORT s32 AudioApi_CreateEmptySoundFont() {
-    CustomSoundFont* soundFont;
+CustomSoundFont* AudioApi_CreateEmptySoundFontInternal() {
+    CustomSoundFont* soundFont = NULL;
     size_t size;
 
-    size = sizeof(CustomSoundFont) + sizeof(uintptr_t) * SOUNDFONT_DEFAULT_INSTRUMENT_CAPACITY;
+    size = sizeof(CustomSoundFont);
     soundFont = recomp_alloc(size);
     if (!soundFont) goto cleanup;
     Lib_MemSet(soundFont, 0, size);
 
+    soundFont->type = SOUNDFONT_CUSTOM;
+    soundFont->sampleBank1 = SOUNDFONT_DEFAULT_SAMPLEBANK_1;
+    soundFont->sampleBank2 = SOUNDFONT_DEFAULT_SAMPLEBANK_2;
     soundFont->numInstruments = 0;
     soundFont->numDrums = 0;
     soundFont->numSfx = 0;
     soundFont->instrumentsCapacity = SOUNDFONT_DEFAULT_INSTRUMENT_CAPACITY;
     soundFont->drumsCapacity = SOUNDFONT_DEFAULT_DRUM_CAPACITY;
     soundFont->sfxCapacity = SOUNDFONT_DEFAULT_SFX_CAPACITY;
+
+    size = soundFont->instrumentsCapacity * sizeof(uintptr_t);
+    soundFont->instruments = recomp_alloc(size);
+    if (!soundFont->instruments) goto cleanup;
+    Lib_MemSet(soundFont->instruments, 0, size);
 
     size = soundFont->drumsCapacity * sizeof(uintptr_t);
     soundFont->drums = recomp_alloc(size);
@@ -159,62 +204,65 @@ RECOMP_EXPORT s32 AudioApi_CreateEmptySoundFont() {
     if (!soundFont->soundEffects) goto cleanup;
     Lib_MemSet(soundFont->soundEffects, 0, size);
 
-    u8 sampleBank1 = 1;
-    u8 sampleBank2 = 255;
+    return soundFont;
+
+ cleanup:
+    AudioApi_FreeSoundFont(soundFont);
+    return NULL;
+}
+
+RECOMP_EXPORT s32 AudioApi_CreateEmptySoundFont() {
+    CustomSoundFont* soundFont = AudioApi_CreateEmptySoundFontInternal();
+
+    if (soundFont == NULL) {
+        return -1;
+    }
 
     AudioTableEntry entry = {
         (uintptr_t) soundFont,
         sizeof(CustomSoundFont),
         MEDIUM_CART,
         CACHE_EITHER,
-        (sampleBank1 << 8) | sampleBank2,
-        0, 0,
+        0, 0, 0,
     };
 
     s32 fontId = AudioApi_AddSoundFont(&entry);
-    if (fontId == -1) goto cleanup;
+
+    if (fontId == -1) {
+        AudioApi_FreeSoundFont(soundFont);
+        return -1;
+    }
 
     return fontId;
-
- cleanup:
-    if (IS_RECOMP_ALLOC(soundFont->drums)) {
-        recomp_free(soundFont->drums);
-    }
-    if (IS_RECOMP_ALLOC(soundFont->soundEffects)) {
-        recomp_free(soundFont->drums);
-    }
-    if (IS_RECOMP_ALLOC(soundFont)) {
-        recomp_free(soundFont);
-    }
-    return -1;
 }
 
-CustomSoundFont* AudioApi_ImportVanillaSoundFont(s32 fontId, uintptr_t* fontData) {
-    if (fontId >= gAudioCtx.soundFontTable->header.numEntries) {
-        return NULL;
-    }
-    CustomSoundFont* soundFont;
-    AudioTableEntry* entry = &gAudioCtx.soundFontTable->entries[fontId];
-    u32 numInstruments = gAudioCtx.soundFontList[fontId].numInstruments;
-    u32 numDrums = gAudioCtx.soundFontList[fontId].numDrums;
-    u32 numSfx = gAudioCtx.soundFontList[fontId].numSfx;
-    size_t size, capacity;
+CustomSoundFont* AudioApi_ImportVanillaSoundFontInternal(uintptr_t* fontData, u8 sampleBank1, u8 sampleBank2,
+                                                         u8 numInstruments, u8 numDrums, u16 numSfx) {
+    CustomSoundFont* soundFont = NULL;
+    size_t size;
 
-    capacity = SOUNDFONT_DEFAULT_INSTRUMENT_CAPACITY;
-    while (numInstruments > capacity) capacity <<= 1;
-    size = sizeof(CustomSoundFont) + sizeof(uintptr_t) * capacity;
+    size = sizeof(CustomSoundFont);
     soundFont = recomp_alloc(size);
     if (!soundFont) goto cleanup;
     Lib_MemSet(soundFont, 0, size);
-    Lib_MemCpy((void*)soundFont->instruments, fontData + 2,
-               numInstruments * sizeof(uintptr_t));
 
+    soundFont->type = SOUNDFONT_CUSTOM;
+    soundFont->sampleBank1 = sampleBank1;
+    soundFont->sampleBank2 = sampleBank2;
     soundFont->numInstruments = numInstruments;
     soundFont->numDrums = numDrums;
     soundFont->numSfx = numSfx;
-    soundFont->instrumentsCapacity = capacity;
+    soundFont->instrumentsCapacity = SOUNDFONT_DEFAULT_INSTRUMENT_CAPACITY;
     soundFont->drumsCapacity = SOUNDFONT_DEFAULT_DRUM_CAPACITY;
     soundFont->sfxCapacity = SOUNDFONT_DEFAULT_SFX_CAPACITY;
+
+    while (numInstruments > soundFont->instrumentsCapacity) soundFont->instrumentsCapacity <<= 1;
+    size = soundFont->instrumentsCapacity * sizeof(uintptr_t);
+    soundFont->instruments = recomp_alloc(size);
+    if (!soundFont->instruments) goto cleanup;
+    Lib_MemSet(soundFont->instruments, 0, size);
+    Lib_MemCpy(soundFont->instruments, fontData + 2,
+               numInstruments * sizeof(uintptr_t));
 
     while (numDrums > soundFont->drumsCapacity) soundFont->drumsCapacity <<= 1;
     size = soundFont->drumsCapacity * sizeof(uintptr_t);
@@ -235,16 +283,35 @@ CustomSoundFont* AudioApi_ImportVanillaSoundFont(s32 fontId, uintptr_t* fontData
     return soundFont;
 
  cleanup:
-    if (IS_RECOMP_ALLOC(soundFont->drums)) {
-        recomp_free(soundFont->drums);
-    }
-    if (IS_RECOMP_ALLOC(soundFont->soundEffects)) {
-        recomp_free(soundFont->drums);
-    }
-    if (IS_RECOMP_ALLOC(soundFont)) {
-        recomp_free(soundFont);
-    }
+    AudioApi_FreeSoundFont(soundFont);
     return NULL;
+}
+
+RECOMP_EXPORT s32 AudioApi_ImportVanillaSoundFont(uintptr_t* fontData, u8 sampleBank1, u8 sampleBank2,
+                                                  u8 numInstruments, u8 numDrums, u16 numSfx) {
+    CustomSoundFont* soundFont =
+        AudioApi_ImportVanillaSoundFontInternal(fontData, sampleBank1, sampleBank2, numInstruments, numDrums, numSfx);
+
+    if (soundFont == NULL) {
+        return -1;
+    }
+
+    AudioTableEntry entry = {
+        (uintptr_t) soundFont,
+        sizeof(CustomSoundFont),
+        MEDIUM_CART,
+        CACHE_EITHER,
+        0, 0, 0,
+    };
+
+    s32 fontId = AudioApi_AddSoundFont(&entry);
+
+    if (fontId == -1) {
+        AudioApi_FreeSoundFont(soundFont);
+        return -1;
+    }
+
+    return fontId;
 }
 
 s32 AudioApi_AddInstrumentInternal(CustomSoundFont* soundFont, Instrument* instrument) {
@@ -267,7 +334,8 @@ RECOMP_EXPORT s32 AudioApi_AddInstrument(s32 fontId, Instrument* instrument) {
     }
 
     AudioTableEntry* entry = &gAudioCtx.soundFontTable->entries[fontId];
-    s32 instId = (entry->shortData2 >> 8) & 0xFF;
+
+    s32 instId = gAudioCtx.soundFontList[fontId].numInstruments;
     if (instId >= SOUNDFONT_MAX_INSTRUMENTS) {
         return -1;
     }
@@ -277,8 +345,9 @@ RECOMP_EXPORT s32 AudioApi_AddInstrument(s32 fontId, Instrument* instrument) {
         return -1;
     }
 
-    if (IS_KSEG0(entry->romAddr)) {
-        instId = AudioApi_AddInstrumentInternal((CustomSoundFont*)entry->romAddr, copy);
+    CustomSoundFont* soundFont = (CustomSoundFont*)entry->romAddr;
+    if (IS_KSEG0(entry->romAddr) && soundFont->type == SOUNDFONT_CUSTOM) {
+        instId = AudioApi_AddInstrumentInternal(soundFont, copy);
     } else {
         RecompQueue_Push(soundFontLoadQueue, AUDIOAPI_CMD_OP_ADD_INSTRUMENT, fontId, instId, (void**)&copy);
     }
@@ -287,11 +356,8 @@ RECOMP_EXPORT s32 AudioApi_AddInstrument(s32 fontId, Instrument* instrument) {
         return -1;
     }
 
-    entry->size += sizeof(uintptr_t);
-    entry->shortData2 = ((instId + 1 & 0xFF) << 8) | (entry->shortData2 & 0xFF);
-    if (gAudioCtx.soundFontList) {
-        gAudioCtx.soundFontList[fontId].numInstruments = instId + 1;
-    }
+    gAudioCtx.soundFontList[fontId].numInstruments = instId + 1;
+
     return instId;
 }
 
@@ -315,7 +381,8 @@ RECOMP_EXPORT s32 AudioApi_AddDrum(s32 fontId, Drum* drum) {
     }
 
     AudioTableEntry* entry = &gAudioCtx.soundFontTable->entries[fontId];
-    s32 drumId = entry->shortData2 & 0xFF;
+
+    s32 drumId = gAudioCtx.soundFontList[fontId].numDrums;
     if (drumId >= SOUNDFONT_MAX_DRUMS) {
         return -1;
     }
@@ -325,8 +392,9 @@ RECOMP_EXPORT s32 AudioApi_AddDrum(s32 fontId, Drum* drum) {
         return -1;
     }
 
-    if (IS_KSEG0(entry->romAddr)) {
-        drumId = AudioApi_AddDrumInternal((CustomSoundFont*)entry->romAddr, copy);
+    CustomSoundFont* soundFont = (CustomSoundFont*)entry->romAddr;
+    if (IS_KSEG0(entry->romAddr) && soundFont->type == SOUNDFONT_CUSTOM) {
+        drumId = AudioApi_AddDrumInternal(soundFont, copy);
     } else {
         RecompQueue_Push(soundFontLoadQueue, AUDIOAPI_CMD_OP_ADD_DRUM, fontId, drumId, (void**)&copy);
     }
@@ -335,10 +403,8 @@ RECOMP_EXPORT s32 AudioApi_AddDrum(s32 fontId, Drum* drum) {
         return -1;
     }
 
-    entry->shortData2 = (entry->shortData2 & 0xFF00) | (drumId + 1);
-    if (gAudioCtx.soundFontList) {
-        gAudioCtx.soundFontList[fontId].numDrums = drumId + 1;
-    }
+    gAudioCtx.soundFontList[fontId].numDrums = drumId + 1;
+
     return drumId;
 }
 
@@ -363,7 +429,8 @@ RECOMP_EXPORT s32 AudioApi_AddSoundEffect(s32 fontId, SoundEffect* sfx) {
     }
 
     AudioTableEntry* entry = &gAudioCtx.soundFontTable->entries[fontId];
-    s32 sfxId = entry->shortData3;
+
+    s32 sfxId = gAudioCtx.soundFontList[fontId].numSfx;
     if (sfxId >= SOUNDFONT_MAX_SFX) {
         return -1;
     }
@@ -373,8 +440,9 @@ RECOMP_EXPORT s32 AudioApi_AddSoundEffect(s32 fontId, SoundEffect* sfx) {
         return -1;
     }
 
-    if (IS_KSEG0(entry->romAddr)) {
-        sfxId = AudioApi_AddSoundEffectInternal((CustomSoundFont*)entry->romAddr, copy);
+    CustomSoundFont* soundFont = (CustomSoundFont*)entry->romAddr;
+    if (IS_KSEG0(entry->romAddr) && soundFont->type == SOUNDFONT_CUSTOM) {
+        sfxId = AudioApi_AddSoundEffectInternal(soundFont, copy);
     } else {
         RecompQueue_Push(soundFontLoadQueue, AUDIOAPI_CMD_OP_ADD_SOUNDEFFECT, fontId, sfxId, (void**)&copy);
     }
@@ -383,10 +451,8 @@ RECOMP_EXPORT s32 AudioApi_AddSoundEffect(s32 fontId, SoundEffect* sfx) {
         return -1;
     }
 
-    entry->shortData3 = sfxId + 1;
-    if (gAudioCtx.soundFontList) {
-        gAudioCtx.soundFontList[fontId].numSfx = sfxId + 1;
-    }
+    gAudioCtx.soundFontList[fontId].numSfx = sfxId + 1;
+
     return sfxId;
 }
 
@@ -412,10 +478,12 @@ RECOMP_EXPORT void AudioApi_ReplaceDrum(s32 fontId, s32 drumId, Drum* drum) {
     if (fontId >= gAudioCtx.soundFontTable->header.numEntries) {
         return;
     }
-    AudioTableEntry* entry = &gAudioCtx.soundFontTable->entries[fontId];
 
-    if (IS_KSEG0(entry->romAddr)) {
-        AudioApi_ReplaceDrumInternal((CustomSoundFont*)entry->romAddr, drumId, copy);
+    AudioTableEntry* entry = &gAudioCtx.soundFontTable->entries[fontId];
+    CustomSoundFont* soundFont = (CustomSoundFont*)entry->romAddr;
+
+    if (IS_KSEG0(entry->romAddr) && soundFont->type == SOUNDFONT_CUSTOM) {
+        AudioApi_ReplaceDrumInternal(soundFont, drumId, copy);
     } else {
         RecompQueue_PushIfNotQueued(soundFontLoadQueue, AUDIOAPI_CMD_OP_REPLACE_DRUM,
                                     fontId, drumId, (void**)&copy);
@@ -445,10 +513,12 @@ RECOMP_EXPORT void AudioApi_ReplaceSoundEffect(s32 fontId, s32 sfxId, SoundEffec
     if (fontId >= gAudioCtx.soundFontTable->header.numEntries) {
         return;
     }
-    AudioTableEntry* entry = &gAudioCtx.soundFontTable->entries[fontId];
 
-    if (IS_KSEG0(entry->romAddr)) {
-        AudioApi_ReplaceSoundEffectInternal((CustomSoundFont*)entry->romAddr, sfxId, copy);
+    AudioTableEntry* entry = &gAudioCtx.soundFontTable->entries[fontId];
+    CustomSoundFont* soundFont = (CustomSoundFont*)entry->romAddr;
+
+    if (IS_KSEG0(entry->romAddr) && soundFont->type == SOUNDFONT_CUSTOM) {
+        AudioApi_ReplaceSoundEffectInternal(soundFont, sfxId, copy);
     } else {
         RecompQueue_PushIfNotQueued(soundFontLoadQueue, AUDIOAPI_CMD_OP_REPLACE_SOUNDEFFECT,
                                     fontId, sfxId, (void**)&copy);
@@ -477,10 +547,12 @@ RECOMP_EXPORT void AudioApi_ReplaceInstrument(s32 fontId, s32 instId, Instrument
     if (fontId >= gAudioCtx.soundFontTable->header.numEntries) {
         return;
     }
-    AudioTableEntry* entry = &gAudioCtx.soundFontTable->entries[fontId];
 
-    if (IS_KSEG0(entry->romAddr)) {
-        AudioApi_ReplaceInstrumentInternal((CustomSoundFont*)entry->romAddr, instId, copy);
+    AudioTableEntry* entry = &gAudioCtx.soundFontTable->entries[fontId];
+    CustomSoundFont* soundFont = (CustomSoundFont*)entry->romAddr;
+
+    if (IS_KSEG0(entry->romAddr) && soundFont->type == SOUNDFONT_CUSTOM) {
+        AudioApi_ReplaceInstrumentInternal(soundFont, instId, copy);
     } else {
         RecompQueue_PushIfNotQueued(soundFontLoadQueue, AUDIOAPI_CMD_OP_REPLACE_INSTRUMENT,
                                     fontId, instId, (void**)&copy);
@@ -500,9 +572,9 @@ void AudioApi_SoundFontQueueDrain(RecompQueueCmd* cmd) {
         return;
     }
 
-    if (IS_KSEG0(entry->romAddr)) {
-        // If the font is in memory (e.g. a CustomSoundFont), we can call the replace command now
-        CustomSoundFont* soundFont = (CustomSoundFont*)entry->romAddr;
+    CustomSoundFont* soundFont = (CustomSoundFont*)entry->romAddr;
+    if (IS_KSEG0(entry->romAddr) && soundFont->type == SOUNDFONT_CUSTOM) {
+        // If the font is in memory and is a CustomSoundFont, we can call the replace command now
         switch (cmd->op) {
         case AUDIOAPI_CMD_OP_REPLACE_DRUM:
             AudioApi_ReplaceDrumInternal(soundFont, cmd->arg1, cmd->asPtr);
@@ -572,17 +644,26 @@ RECOMP_PATCH void AudioLoad_RelocateFont(s32 fontId, void* fontDataStartAddr, Sa
     s32 i;
 
     // We've just loaded this font from ROM or callback, so apply any changes from our load queue
-    if (!IS_KSEG0(entry->romAddr)) {
-        fontData = AudioApi_ImportVanillaSoundFont(fontId, (uintptr_t*)fontDataStartAddr);
+    if (fontData->type == SOUNDFONT_VANILLA) {
+        u8 sampleBank1 = (entry->shortData1 & 0xFF00) >> 8;
+        u8 sampleBank2 = (entry->shortData1 & 0xFF);
+        u8 numInstruments = (entry->shortData2 & 0xFF00) >> 8;
+        u8 numDrums = (entry->shortData2 & 0xFF);
+        u16 numSfx = (entry->shortData3);
+
+        fontData = AudioApi_ImportVanillaSoundFontInternal((uintptr_t*)fontDataStartAddr, sampleBank1, sampleBank2,
+                                                           numInstruments, numDrums, numSfx);
+
         AudioApi_ApplySoundFontChanges(fontId, fontData);
     }
 
     for (i = 0; i < fontData->numDrums; i++) {
-        if (fontData->drums[i] == NULL) {
+        drum = fontData->drums[i];
+        if (drum == NULL) {
             continue;
         }
 
-        drum = RELOC_TO_RAM(fontData->drums[i], fontDataStartAddr);
+        drum = RELOC_TO_RAM(drum, fontDataStartAddr);
         drum->envelope = RELOC_TO_RAM(drum->envelope, fontDataStartAddr);
         drum->isRelocated = true;
 
@@ -607,11 +688,12 @@ RECOMP_PATCH void AudioLoad_RelocateFont(s32 fontId, void* fontDataStartAddr, Sa
     }
 
     for (i = 0; i < fontData->numInstruments; i++) {
-        if (fontData->instruments[i] == NULL) {
+        inst = fontData->instruments[i];
+        if (inst == NULL) {
             continue;
         }
 
-        inst = RELOC_TO_RAM(fontData->instruments[i], fontDataStartAddr);
+        inst = RELOC_TO_RAM(inst, fontDataStartAddr);
         inst->envelope = RELOC_TO_RAM(inst->envelope, fontDataStartAddr);
         inst->isRelocated = true;
 
@@ -646,10 +728,8 @@ RECOMP_PATCH void AudioLoad_RelocateFont(s32 fontId, void* fontDataStartAddr, Sa
         recomp_free(fontDataStartAddr);
     }
 
-    // If this sequence was loaded from ROM or a callback, update the entry's romAddr to our new
-    // permanent memory.
+    // If this soundfont was loaded from ROM or a callback, update the entry's romAddr to our new permanent memory.
     if (!IS_KSEG0(entry->romAddr)) {
-        fontData->origRomAddr = entry->romAddr;
         entry->romAddr = (uintptr_t)fontData;
     }
 
@@ -678,13 +758,13 @@ RECOMP_PATCH void AudioLoad_RelocateSample(TunedSample* tunedSample, void* fontD
 
 // ======== MEMORY FUNCTIONS ========
 
-bool AudioApi_GrowSoundFontTable() {
+bool AudioApi_GrowSoundFontTables() {
     u16 oldCapacity = soundFontTableCapacity;
     u16 newCapacity = soundFontTableCapacity << 1;
     size_t oldSize, newSize;
     AudioTable* newSoundFontTable = NULL;
-
-    // TODO: gAudioCtx.fontLoadStatus and gAudioCtx.soundFontList
+    SoundFont* newSoundFontList = NULL;
+    u8* newSoundFontLoadStatus = NULL;
 
     // Grow gAudioCtx.soundFontTable
     oldSize = sizeof(AudioTableHeader) + oldCapacity * sizeof(AudioTableEntry);
@@ -696,9 +776,36 @@ bool AudioApi_GrowSoundFontTable() {
     Lib_MemSet(newSoundFontTable, 0, newSize);
     Lib_MemCpy(newSoundFontTable, gAudioCtx.soundFontTable, oldSize);
 
-    // Store new table
-    recomp_printf("AudioApi: Resized soundfont table to %d\n", newCapacity);
+    // Grow gAudioCtx.soundFontList
+    oldSize = sizeof(SoundFont) * oldCapacity;
+    newSize = sizeof(SoundFont) * newCapacity;
+    newSoundFontList = recomp_alloc(newSize);
+    if (!newSoundFontList) {
+        goto cleanup;
+    }
+    Lib_MemSet(newSoundFontList, 0, newSize);
+    Lib_MemCpy(newSoundFontList, gAudioCtx.soundFontList, oldSize);
+
+    // Grow sExtSoundFontLoadStatus
+    oldSize = sizeof(u8) * oldCapacity;
+    newSize = sizeof(u8) * newCapacity;
+    newSoundFontLoadStatus = recomp_alloc(newSize);
+    if (!newSoundFontLoadStatus) {
+        goto cleanup;
+    }
+    Lib_MemSet(newSoundFontLoadStatus, 0, newSize);
+    Lib_MemCpy(newSoundFontLoadStatus, sExtSoundFontLoadStatus, oldSize);
+
+    // Free old tables
+    if (IS_RECOMP_ALLOC(gAudioCtx.soundFontTable)) recomp_free(gAudioCtx.soundFontTable);
+    if (IS_RECOMP_ALLOC(gAudioCtx.soundFontList)) recomp_free(gAudioCtx.soundFontList);
+    if (IS_RECOMP_ALLOC(sExtSoundFontLoadStatus)) recomp_free(sExtSoundFontLoadStatus);
+
+    // Store new tables
+    recomp_printf("AudioApi: Resized soundfont tables to %d\n", newCapacity);
     gAudioCtx.soundFontTable = newSoundFontTable;
+    gAudioCtx.soundFontList = newSoundFontList;
+    sExtSoundFontLoadStatus = newSoundFontLoadStatus;
     soundFontTableCapacity = newCapacity;
     return true;
 
@@ -706,6 +813,12 @@ bool AudioApi_GrowSoundFontTable() {
     recomp_printf("AudioApi: Error resizing soundfont table to %d\n", newCapacity);
     if (newSoundFontTable != NULL) {
         recomp_free(newSoundFontTable);
+    }
+    if (newSoundFontList != NULL) {
+        recomp_free(newSoundFontList);
+    }
+    if (newSoundFontLoadStatus != NULL) {
+        recomp_free(newSoundFontLoadStatus);
     }
     return false;
 }
@@ -970,6 +1083,14 @@ Sample* AudioApi_CopySample(Sample* src) {
     }
 
     return copy;
+}
+
+void AudioApi_FreeSoundFont(CustomSoundFont* soundFont) {
+    if (!soundFont) return;
+    if (soundFont->instruments) recomp_free(soundFont->instruments);
+    if (soundFont->drums) recomp_free(soundFont->drums);
+    if (soundFont->soundEffects) recomp_free(soundFont->soundEffects);
+    recomp_free(soundFont);
 }
 
 void AudioApi_FreeDrum(Drum* drum) {

@@ -42,6 +42,7 @@ U32HashsetHandle permanentCache;
 U32HashsetHandle loadedCache;
 
 u8* sExtSeqLoadStatus = gAudioCtx.seqLoadStatus;
+u8* sExtSoundFontLoadStatus = gAudioCtx.fontLoadStatus;
 
 extern AudioTable* AudioLoad_GetLoadTable(s32 tableType);
 extern u32 AudioLoad_GetRealTableIndex(s32 tableType, u32 id);
@@ -57,7 +58,7 @@ s32 AudioApi_GetTableEntryLoadStatus(s32 tableType, s32 id) {
     if (tableType == SEQUENCE_TABLE) {
         return sExtSeqLoadStatus[realId];
     } else if (tableType == FONT_TABLE) {
-        return gAudioCtx.fontLoadStatus[realId];
+        return sExtSoundFontLoadStatus[realId];
     } else {
         return LOAD_STATUS_NOT_LOADED;
     }
@@ -71,7 +72,7 @@ void AudioApi_SetTableEntryLoadStatus(s32 tableType, s32 id, s32 status) {
     if (tableType == SEQUENCE_TABLE) {
         sExtSeqLoadStatus[realId] = status;
     } else if (tableType == FONT_TABLE) {
-        gAudioCtx.fontLoadStatus[realId] = status;
+        sExtSoundFontLoadStatus[realId] = status;
     }
 }
 

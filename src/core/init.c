@@ -14,7 +14,6 @@
  */
 
 extern void AudioLoad_InitTable(AudioTable* table, uintptr_t romAddr, u16 unkMediumParam);
-extern void AudioLoad_InitSoundFont(s32 fontId);
 
 AudioApiInitPhase gAudioApiInitPhase = AUDIOAPI_INIT_NOT_READY;
 
@@ -45,9 +44,6 @@ RECOMP_HOOK_RETURN("AudioThread_UpdateImpl") void on_AudioThread_UpdateImpl() {
 }
 
 RECOMP_PATCH void AudioLoad_Init(void* heap, size_t heapSize) {
-    s32 pad1[9];
-    s32 numFonts;
-    s32 pad2[2];
     u8* audioCtxPtr;
     void* addr;
     s32 i;
@@ -169,13 +165,6 @@ RECOMP_PATCH void AudioLoad_Init(void* heap, size_t heapSize) {
     gAudioCtx.specId = 0;
     gAudioCtx.resetStatus = 1; // Set reset to immediately initialize the audio heap
     AudioHeap_ResetStep();
-
-    numFonts = gAudioCtx.soundFontTable->header.numEntries;
-    gAudioCtx.soundFontList = recomp_alloc(numFonts * sizeof(SoundFont));
-
-    for (i = 0; i < numFonts; i++) {
-        AudioLoad_InitSoundFont(i);
-    }
 
     gAudioCtxInitialized = true;
     osSendMesg(gAudioCtx.taskStartQueueP, (void*)gAudioCtx.totalTaskCount, OS_MESG_NOBLOCK);

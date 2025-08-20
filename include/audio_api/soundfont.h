@@ -16,6 +16,8 @@ static EnvelopePoint DefaultEnvelopePoint[] = {
 };
 
 RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_CreateEmptySoundFont());
+RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_ImportVanillaSoundFont(uintptr_t* fontData, u8 sampleBank1, u8 sampleBank2, u8 numInstruments, u8 numDrums, u16 numSfx));
+
 RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_AddSoundFont(AudioTableEntry* entry));
 RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_ReplaceSoundFont(s32 fontId, AudioTableEntry* entry));
 RECOMP_IMPORT("magemods_audio_api", void AudioApi_RestoreSoundFont(s32 fontId));
