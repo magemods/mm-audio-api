@@ -16,6 +16,7 @@
 #include <extlib/resource/abstract.hpp>
 #include <extlib/resource/audiofile.hpp>
 #include <extlib/resource/generic.hpp>
+#include <extlib/resource/samplebank.hpp>
 #include <extlib/thread.hpp>
 
 extern "C" {
@@ -140,6 +141,7 @@ RECOMP_DLL_FUNC(AudioApiNative_AddResource) {
         auto resource = std::make_shared<Resource::Generic>(file, cacheStrategy);
 
         info->resourceId = sResourceCount++;
+        info->cacheStrategy = static_cast<AudioApiCacheStrategy>(cacheStrategy);
         info->filesize = resource->size();
         file->close();
 
@@ -195,6 +197,7 @@ RECOMP_DLL_FUNC(AudioApiNative_AddAudioFile) {
         info->loopStart   = resource->metadata->loopStart;
         info->loopEnd     = resource->metadata->loopEnd;
         info->loopCount   = resource->metadata->loopCount;
+        info->cacheStrategy = static_cast<AudioApiCacheStrategy>(cacheStrategy);
 
         {
             std::unique_lock<std::shared_mutex> lock(gResourceDataMutex);
@@ -214,6 +217,44 @@ RECOMP_DLL_FUNC(AudioApiNative_AddAudioFile) {
         //PLOG_ERROR << "Error probing file: " << baseDir << "/" << path << " Reason: " << e.what();
     } catch (...) {
         PLOG_ERROR << "Error probing file: Unknown error";
+    }
+
+    RECOMP_RETURN(bool, false);
+}
+
+RECOMP_DLL_FUNC(AudioApiNative_AddSampleBank) {
+    auto info = RECOMP_ARG(AudioApiSampleBankInfo*, 0);
+    auto baseDir = RECOMP_ARG_U8STR(1);
+    auto path = RECOMP_ARG_U8STR(2);
+    auto cacheStrategy = Resource::parseCacheStrategy(info->cacheStrategy);
+
+    try {
+        // TODO: if info->filesize exists, avoid opening file and just check that it exists
+        auto file = gVfs.openFile(baseDir, path);
+        auto resource = std::make_shared<Resource::SampleBank>(file, cacheStrategy);
+
+        info->resourceId = sResourceCount++;
+        info->cacheStrategy = static_cast<AudioApiCacheStrategy>(cacheStrategy);
+        info->filesize = resource->size();
+        file->close();
+
+        {
+            std::unique_lock<std::shared_mutex> lock(gResourceDataMutex);
+            gResourceData[info->resourceId] = std::move(resource);
+        }
+
+        queuePreload(info->resourceId);
+
+        RECOMP_RETURN(bool, true);
+
+    } catch (const fs::filesystem_error& e) {
+        PLOG_ERROR << "Error adding sample bank: " << e.what();
+    } catch (const std::invalid_argument& e) {
+        PLOG_ERROR << "Error adding sample bank: " << e.what();
+    } catch (const std::runtime_error& e) {
+        PLOG_ERROR << "Error adding sample bank: " << e.what();
+    } catch (...) {
+        PLOG_ERROR << "Error adding sample bank: Unknown error";
     }
 
     RECOMP_RETURN(bool, false);

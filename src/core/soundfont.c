@@ -43,6 +43,7 @@ typedef struct {
 
 typedef enum {
     AUDIOAPI_CMD_OP_REPLACE_SOUNDFONT,
+    AUDIOAPI_CMD_OP_SET_SAMPLEBANK,
     AUDIOAPI_CMD_OP_ADD_DRUM,
     AUDIOAPI_CMD_OP_REPLACE_DRUM,
     AUDIOAPI_CMD_OP_ADD_SOUNDEFFECT,
@@ -314,6 +315,38 @@ RECOMP_EXPORT s32 AudioApi_ImportVanillaSoundFont(uintptr_t* fontData, u8 sample
     return fontId;
 }
 
+RECOMP_EXPORT void AudioApi_SetSoundFontSampleBank(s32 fontId, s32 bankNum, s32 bankId) {
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_NOT_READY) {
+        return;
+    }
+
+    if (gAudioApiInitPhase == AUDIOAPI_INIT_QUEUEING) {
+        RecompQueue_PushIfNotQueued(soundFontInitQueue, AUDIOAPI_CMD_OP_SET_SAMPLEBANK,
+                                    fontId, bankNum, (void**)&bankId);
+        return;
+    }
+
+    if (fontId >= gAudioCtx.soundFontTable->header.numEntries) {
+        return;
+    }
+    if (bankId >= gAudioCtx.sampleBankTable->header.numEntries) {
+        return;
+    }
+
+    AudioTableEntry* entry = &gAudioCtx.soundFontTable->entries[fontId];
+    CustomSoundFont* soundFont = (CustomSoundFont*)entry->romAddr;
+
+    if (IS_KSEG0(entry->romAddr) && soundFont->type == SOUNDFONT_CUSTOM) {
+        if (bankNum == 1) {
+            soundFont->sampleBank1 = bankId;
+        } else if (bankNum == 2) {
+            soundFont->sampleBank2 = bankId;
+        }
+    } else {
+        RecompQueue_Push(soundFontLoadQueue, AUDIOAPI_CMD_OP_SET_SAMPLEBANK, fontId, bankNum, (void**)&bankId);
+    }
+}
+
 s32 AudioApi_AddInstrumentInternal(CustomSoundFont* soundFont, Instrument* instrument) {
     if (soundFont->numInstruments >= soundFont->instrumentsCapacity) {
         if (!AudioApi_GrowInstrumentList(&soundFont)) {
@@ -576,6 +609,9 @@ void AudioApi_SoundFontQueueDrain(RecompQueueCmd* cmd) {
     if (IS_KSEG0(entry->romAddr) && soundFont->type == SOUNDFONT_CUSTOM) {
         // If the font is in memory and is a CustomSoundFont, we can call the replace command now
         switch (cmd->op) {
+        case AUDIOAPI_CMD_OP_SET_SAMPLEBANK:
+            AudioApi_SetSoundFontSampleBank(cmd->arg0, cmd->arg1, cmd->asInt);
+            break;
         case AUDIOAPI_CMD_OP_REPLACE_DRUM:
             AudioApi_ReplaceDrumInternal(soundFont, cmd->arg1, cmd->asPtr);
             break;
@@ -589,6 +625,7 @@ void AudioApi_SoundFontQueueDrain(RecompQueueCmd* cmd) {
     } else {
         // Otherwise we need to move it to load queue to apply once the font is loaded
         switch (cmd->op) {
+        case AUDIOAPI_CMD_OP_SET_SAMPLEBANK:
         case AUDIOAPI_CMD_OP_ADD_DRUM:
         case AUDIOAPI_CMD_OP_REPLACE_DRUM:
         case AUDIOAPI_CMD_OP_ADD_SOUNDEFFECT:
@@ -739,17 +776,27 @@ RECOMP_PATCH void AudioLoad_RelocateFont(s32 fontId, void* fontDataStartAddr, Sa
 
 RECOMP_PATCH void AudioLoad_RelocateSample(TunedSample* tunedSample, void* fontData, SampleBankRelocInfo* sampleBankReloc) {
     Sample* sample = tunedSample->sample = RELOC_TO_RAM(tunedSample->sample, fontData);
+    uintptr_t baseAddr;
 
     if ((sample->size != 0) && (sample->isRelocated != true)) {
         sample->loop = RELOC_TO_RAM(sample->loop, fontData);
         sample->book = RELOC_TO_RAM(sample->book, fontData);
 
         if (sample->medium == 0) {
-            sample->sampleAddr = RELOC_TO_RAM(sample->sampleAddr, sampleBankReloc->baseAddr1);
+            baseAddr = sampleBankReloc->baseAddr1;
             sample->medium = sampleBankReloc->medium1;
         } else if (sample->medium == 1) {
-            sample->sampleAddr = RELOC_TO_RAM(sample->sampleAddr, sampleBankReloc->baseAddr2);
+            baseAddr = sampleBankReloc->baseAddr2;
             sample->medium = sampleBankReloc->medium2;
+        } else {
+            sample->sampleAddr = NULL;
+            return;
+        }
+
+        if (IS_DMA_CALLBACK_DEV_ADDR(baseAddr)) {
+            sample->sampleAddr = (u8*)AudioApi_AddDmaSubCallback(baseAddr, (uintptr_t)sample->sampleAddr, 0);
+        } else {
+            sample->sampleAddr = RELOC_TO_RAM(sample->sampleAddr, baseAddr);
         }
 
         sample->isRelocated = true;

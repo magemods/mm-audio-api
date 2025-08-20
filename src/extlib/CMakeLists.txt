@@ -7,6 +7,7 @@ target_sources(${TARGET_NAME} PUBLIC
     "vfs/zip_file.cpp"
     "resource/generic.cpp"
     "resource/audiofile.cpp"
+    "resource/samplebank.cpp"
     "decoder/abstract.cpp"
     "decoder/metadata.cpp"
     "decoder/wav.cpp"

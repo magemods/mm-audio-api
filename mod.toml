@@ -47,6 +47,7 @@ native_libraries = [
         "AudioApiNative_Dma",
         "AudioApiNative_AddResource",
         "AudioApiNative_AddAudioFile",
+        "AudioApiNative_AddSampleBank",
     ] }
 ]
 

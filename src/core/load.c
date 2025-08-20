@@ -200,6 +200,16 @@ RECOMP_EXPORT uintptr_t AudioApi_AddDmaCallback(AudioApiDmaCallback callback, u3
     return DMA_CALLBACK_START_DEV_ADDR + id;
 }
 
+RECOMP_EXPORT uintptr_t AudioApi_AddDmaSubCallback(uintptr_t devAddr, u32 arg1, u32 arg2) {
+    u16 id = devAddr - DMA_CALLBACK_START_DEV_ADDR;
+    if (id >= (u16)dmaCallbacks.count) {
+        return (uintptr_t)NULL;
+    }
+
+    AudioApiDmaCallbackEntry* entry = DynDataArr_get(&dmaCallbacks, id);
+    return AudioApi_AddDmaCallback(entry->callback, entry->arg0, arg1, arg2);
+}
+
 RECOMP_EXPORT s32 AudioApi_NativeDmaCallback(void* ramAddr, size_t size, size_t offset, u32 arg0, u32 arg1, u32 arg2) {
     u32 args[] = {arg0, arg1, arg2};
 

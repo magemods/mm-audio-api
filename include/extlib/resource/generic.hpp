@@ -33,7 +33,7 @@ public:
     void runPreloadTask(const PreloadTask& task) override;
     void gc() override;
 
-private:
+protected:
     std::shared_ptr<Vfs::File> file;
     std::atomic<std::chrono::steady_clock::time_point> atime{EPOCH};
 

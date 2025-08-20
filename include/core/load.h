@@ -14,6 +14,7 @@ extern OSMesg currAudioFrameDmaMesgBuf[MAX_SAMPLE_DMA_PER_FRAME];
 typedef s32 (*AudioApiDmaCallback)(void* ramAddr, size_t size, size_t offset, u32 arg0, u32 arg1, u32 arg2);
 
 uintptr_t AudioApi_AddDmaCallback(AudioApiDmaCallback callback, u32 arg0, u32 arg1, u32 arg2);
+uintptr_t AudioApi_AddDmaSubCallback(uintptr_t devAddr, u32 arg1, u32 arg2);
 s32 AudioApi_NativeDmaCallback(void* ramAddr, size_t size, size_t offset, u32 arg0, u32 arg1, u32 arg2);
 
 #endif

@@ -28,9 +28,6 @@
 
 #define MAX_FONTS_PER_SEQUENCE 4
 
-extern u32 AudioLoad_GetRealTableIndex(s32 tableType, u32 id);
-extern void* AudioLoad_SyncLoad(s32 tableType, u32 id, s32* didAllocate);
-
 typedef enum {
     AUDIOAPI_CMD_OP_REPLACE_SEQUENCE,
     AUDIOAPI_CMD_OP_REPLACE_SEQUENCE_FONT,

@@ -21,6 +21,7 @@ RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_ImportVanillaSoundFont(uintptr_
 RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_AddSoundFont(AudioTableEntry* entry));
 RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_ReplaceSoundFont(s32 fontId, AudioTableEntry* entry));
 RECOMP_IMPORT("magemods_audio_api", void AudioApi_RestoreSoundFont(s32 fontId));
+RECOMP_IMPORT("magemods_audio_api", void AudioApi_SetSoundFontSampleBank(s32 fontId, s32 bankNum, s32 bankId));
 
 RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_AddInstrument(s32 fontId, Instrument* instrument));
 RECOMP_IMPORT("magemods_audio_api", s32 AudioApi_AddDrum(s32 fontId, Drum* drum));

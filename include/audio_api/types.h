@@ -68,4 +68,8 @@ typedef struct AudioApiResourceInfo {
     AudioApiCacheStrategy cacheStrategy;
 } AudioApiResourceInfo;
 
+typedef AudioApiResourceInfo AudioApiSequenceInfo;
+typedef AudioApiResourceInfo AudioApiSoundFontInfo;
+typedef AudioApiResourceInfo AudioApiSampleBankInfo;
+
 #endif

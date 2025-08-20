@@ -7,25 +7,10 @@
 #include <audio_api/soundfont.h>
 #include <audio_api/cseq.h>
 
-RECOMP_IMPORT(".", bool AudioApiNative_AddAudioFile(AudioApiFileInfo* info, char* dir, char* filename));
-RECOMP_IMPORT(".", uintptr_t AudioApi_AddDmaCallback(AudioApiDmaCallback callback, u32 arg0, u32 arg1, u32 arg2));
-RECOMP_IMPORT(".", s32 AudioApi_NativeDmaCallback(void* ramAddr, size_t size, size_t offset, u32 arg0, u32 arg1, u32 arg2));
+RECOMP_IMPORT(".", s32 AudioApi_AddAudioFileFromFs(AudioApiFileInfo* info, char* dir, char* filename));
+RECOMP_IMPORT(".", uintptr_t AudioApi_GetResourceDevAddr(u32 resourceId, u32 arg1, u32 arg2));
 
-RECOMP_EXPORT bool AudioApi_AddAudioFile(AudioApiFileInfo* info, char* dir, char* filename) {
-    AudioApiFileInfo defaultInfo = {0};
-
-    if (info == NULL) {
-        info = &defaultInfo;
-    }
-
-    return AudioApiNative_AddAudioFile(info, dir, filename);
-}
-
-RECOMP_EXPORT uintptr_t AudioApi_GetAudioFileDevAddr(u32 resourceId, u32 trackNo) {
-    return AudioApi_AddDmaCallback(AudioApi_NativeDmaCallback, resourceId, trackNo, 0);
-}
-
-RECOMP_EXPORT s32 AudioApi_AddStreamedSequence(AudioApiFileInfo* info, char* dir, char* filename) {
+RECOMP_EXPORT s32 AudioApi_CreateStreamedSequence(AudioApiFileInfo* info, char* dir, char* filename) {
     AudioApiFileInfo defaultInfo = {0};
     u32 channelCount, trackCount;
     u32 channelNo, trackNo;
@@ -47,7 +32,7 @@ RECOMP_EXPORT s32 AudioApi_AddStreamedSequence(AudioApiFileInfo* info, char* dir
         info = &defaultInfo;
     }
 
-    if (!AudioApiNative_AddAudioFile(info, dir, filename)) {
+    if (!AudioApi_AddAudioFileFromFs(info, dir, filename)) {
         return -1;
     }
 
@@ -71,7 +56,7 @@ RECOMP_EXPORT s32 AudioApi_AddStreamedSequence(AudioApiFileInfo* info, char* dir
 
     for (trackNo = 0; trackNo < trackCount; trackNo++) {
 
-        sampleAddr = AudioApi_GetAudioFileDevAddr(info->resourceId, trackNo);
+        sampleAddr = AudioApi_GetResourceDevAddr(info->resourceId, trackNo, 0);
 
         sampleLoop = (AdpcmLoop){
             { info->loopStart, info->loopEnd, info->loopCount, info->sampleCount }, {}
