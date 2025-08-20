@@ -781,6 +781,7 @@ RECOMP_PATCH void AudioLoad_RelocateSample(TunedSample* tunedSample, void* fontD
     if ((sample->size != 0) && (sample->isRelocated != true)) {
         sample->loop = RELOC_TO_RAM(sample->loop, fontData);
         sample->book = RELOC_TO_RAM(sample->book, fontData);
+        sample->isRelocated = true;
 
         if (sample->medium == 0) {
             baseAddr = sampleBankReloc->baseAddr1;
@@ -789,7 +790,6 @@ RECOMP_PATCH void AudioLoad_RelocateSample(TunedSample* tunedSample, void* fontD
             baseAddr = sampleBankReloc->baseAddr2;
             sample->medium = sampleBankReloc->medium2;
         } else {
-            sample->sampleAddr = NULL;
             return;
         }
 
@@ -798,8 +798,6 @@ RECOMP_PATCH void AudioLoad_RelocateSample(TunedSample* tunedSample, void* fontD
         } else {
             sample->sampleAddr = RELOC_TO_RAM(sample->sampleAddr, baseAddr);
         }
-
-        sample->isRelocated = true;
     }
 }
 

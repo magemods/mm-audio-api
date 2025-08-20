@@ -199,6 +199,11 @@ RECOMP_DLL_FUNC(AudioApiNative_AddAudioFile) {
         info->loopCount   = resource->metadata->loopCount;
         info->cacheStrategy = static_cast<AudioApiCacheStrategy>(cacheStrategy);
 
+        PLOG_DEBUG << "Added: " << file->fullpath();
+        PLOG_DEBUG << "sampleRate: " << info->sampleRate << " sampleCount: " << info->sampleCount
+                   << " trackCount: " << info->trackCount << " loopCount: " << info->loopCount
+                   << " loopStart: " << info->loopStart << " loopEnd: " << info->loopEnd;
+
         {
             std::unique_lock<std::shared_mutex> lock(gResourceDataMutex);
             gResourceData[info->resourceId] = std::move(resource);

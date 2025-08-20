@@ -22,6 +22,10 @@ public:
         return filesize;
     };
 
+    std::string fullpath() const {
+        return path.string();
+    };
+
     std::string extension() const {
         return path.extension().string();
     };

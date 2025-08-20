@@ -1,6 +1,7 @@
 #include <global.h>
 #include <recomp/modding.h>
 #include <recomp/recomputils.h>
+#include <libc64/fixed_point.h>
 
 #include <audio_api/types.h>
 #include <audio_api/sequence.h>
@@ -77,7 +78,8 @@ RECOMP_EXPORT s32 AudioApi_CreateStreamedSequence(AudioApiFileInfo* info) {
     if (info->loopCount == -1) {
         length = 0x7FFF;
     } else {
-        length = (info->loopCount + 1) * ((f32)info->sampleCount / info->sampleRate) * (TATUMS_PER_BEAT / 60.0f);
+        length = lceilf((info->loopCount + 1) * ((f32)info->sampleCount / info->sampleRate) *
+                        (TATUMS_PER_BEAT / 60.0f));
         length = CLAMP(length, 0, 0x7FFF);
     }
 

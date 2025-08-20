@@ -4,7 +4,7 @@
 #include <audio_api/types.h>
 
 RECOMP_IMPORT(".", bool AudioApiNative_AddResource(AudioApiResourceInfo* info, char* dir, char* filename));
-RECOMP_IMPORT(".", bool AudioApiNative_AddSampleBank(AudioApiResourceInfo* info, char* dir, char* filename));
+RECOMP_IMPORT(".", bool AudioApiNative_AddSampleBank(AudioApiSampleBankInfo* info, char* dir, char* filename));
 RECOMP_IMPORT(".", bool AudioApiNative_AddAudioFile(AudioApiFileInfo* info, char* dir, char* filename));
 RECOMP_IMPORT(".", uintptr_t AudioApi_AddDmaCallback(AudioApiDmaCallback callback, u32 arg0, u32 arg1, u32 arg2));
 RECOMP_IMPORT(".", s32 AudioApi_NativeDmaCallback(void* ramAddr, size_t size, size_t offset, u32 arg0, u32 arg1, u32 arg2));
