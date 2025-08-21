@@ -2,7 +2,7 @@
 #define __AUDIO_API_ALL_H__
 
 /*! \file audio_api/all.h
-    \version 0.4.0
+    \version 0.5.0
     \brief All imports
  */
 

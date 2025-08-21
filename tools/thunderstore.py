@@ -73,9 +73,9 @@ def create_logger():
     def func(message, result):
         nonlocal error
         if result:
-            error = True
             print("\033[32m[OK]\033[0m " + message)
         else:
+            error = True
             print("\033[31m[ERROR]\033[0m " + message)
     def did_error():
         return error

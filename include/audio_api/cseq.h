@@ -2,7 +2,7 @@
 #define __AUDIO_API_CSEQ_H__
 
 /*! \file audio_api/cseq.h
-    \version 0.4.0
+    \version 0.5.0
     \brief Functions for programatically building sequence files
  */
 

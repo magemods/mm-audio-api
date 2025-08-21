@@ -2,7 +2,7 @@
 #define __AUDIO_API_TYPES_H__
 
 /*! \file audio_api/types.h
-    \version 0.4.0
+    \version 0.5.0
     \brief Audio API type definitions
  */
 

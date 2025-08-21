@@ -2,7 +2,7 @@
 #define __AUDIO_API_SOUNDFONT_H__
 
 /*! \file audio_api/soundfont.h
-    \version 0.4.0
+    \version 0.5.0
     \brief Low level imports for working with soundfonts
  */
 

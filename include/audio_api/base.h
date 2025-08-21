@@ -2,7 +2,7 @@
 #define __AUDIO_API_BASE_H__
 
 /*! \file audio_api/base.h
-    \version 0.4.0
+    \version 0.5.0
     \brief Base level imports
  */
 
