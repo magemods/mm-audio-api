@@ -700,7 +700,7 @@ RECOMP_PATCH void AudioLoad_RelocateFont(s32 fontId, void* fontDataStartAddr, Sa
             continue;
         }
 
-        drum = RELOC_TO_RAM(drum, fontDataStartAddr);
+        drum = fontData->drums[i] = RELOC_TO_RAM(drum, fontDataStartAddr);
         drum->envelope = RELOC_TO_RAM(drum->envelope, fontDataStartAddr);
         drum->isRelocated = true;
 
@@ -730,7 +730,7 @@ RECOMP_PATCH void AudioLoad_RelocateFont(s32 fontId, void* fontDataStartAddr, Sa
             continue;
         }
 
-        inst = RELOC_TO_RAM(inst, fontDataStartAddr);
+        inst = fontData->instruments[i] = RELOC_TO_RAM(inst, fontDataStartAddr);
         inst->envelope = RELOC_TO_RAM(inst->envelope, fontDataStartAddr);
         inst->isRelocated = true;
 

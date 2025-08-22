@@ -41,6 +41,9 @@ public:
     virtual std::vector<PreloadTask> getPreloadTasks() = 0;
     virtual void runPreloadTask(const PreloadTask& task) = 0;
     virtual void gc() = 0;
+
+protected:
+    bool initialPreload = true;
 };
 
 using ResourcePtr = std::shared_ptr<Abstract>;

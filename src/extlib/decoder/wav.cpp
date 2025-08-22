@@ -16,7 +16,6 @@ void Wav::open() {
 
     std::unique_lock<std::mutex> lock(mutex);
 
-    static bool firstOpen = true;
     decoder = new drwav;
 
     drwav_bool32 result = firstOpen

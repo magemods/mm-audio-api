@@ -101,8 +101,6 @@ void Audiofile::dma(uint8_t* rdram, int32_t ptr, size_t offset, size_t count, ui
 }
 
 std::vector<PreloadTask> Audiofile::getPreloadTasks() {
-    static bool initialPreload = true;
-
     if (cacheStrategy == CacheStrategy::None) {
         return {};
     }

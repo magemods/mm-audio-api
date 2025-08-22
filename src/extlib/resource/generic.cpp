@@ -64,8 +64,6 @@ void Generic::dma(uint8_t* rdram, int32_t ptr, size_t offset, size_t size, uint3
 }
 
 std::vector<PreloadTask> Generic::getPreloadTasks() {
-    static bool initialPreload = true;
-
     if (cacheStrategy == CacheStrategy::None) {
         return {};
     }

@@ -40,7 +40,7 @@ void Metadata::setCuePointLabel(uint32_t cueId, const char* data, size_t size) {
     uppercase(text);
     trim(text);
 
-    if (text == "LOOP" || text == "CYCLE") {
+    if (text == "LOOP" || text == "CYCLE" || text == "CYCLES") {
         cuePoints[cueId].type = CuePointType::LOOP;
     } else if (text == "LOOPSTART" || text == "LOOP_START") {
         cuePoints[cueId].type = CuePointType::LOOP_START;

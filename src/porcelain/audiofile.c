@@ -125,7 +125,7 @@ RECOMP_EXPORT s32 AudioApi_CreateStreamedSequence(AudioApiFileInfo* info) {
         cseq_section_end(chan);
     }
 
-    cseq_vol(seq, 0xA0);
+    cseq_vol(seq, 0xFF);
     cseq_tempo(seq, 0x01);
     cseq_delay(seq, length);
 

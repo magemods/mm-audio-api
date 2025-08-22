@@ -48,6 +48,7 @@ protected:
     Abstract(std::shared_ptr<Vfs::File> file)
         : file(file), metadata(std::make_shared<Metadata>()) {}
 
+    bool firstOpen = true;
     std::mutex mutex;
     std::shared_ptr<Vfs::File> file;
 };
