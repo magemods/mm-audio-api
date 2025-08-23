@@ -113,8 +113,11 @@ ZipArchive::FileInfo ZipArchive::locateFile(std::string path) {
 
         stream.seekg(stat.m_local_header_ofs, std::ios_base::beg);
         stream.read(localDirHeader, sizeof(localDirHeader));
-        if (stream.fail() && !stream.eof()) {
+
+        if (stream.eof()) {
             stream.clear();
+        }
+        if (stream.fail()) {
             throw std::runtime_error("Zip archive error: Failed to read local dir header");
         }
 
@@ -163,8 +166,11 @@ size_t ZipArchive::extractBytesToBuffer(void* buffer, size_t bytes, size_t offse
 
     stream.seekg(offset, std::ios_base::beg);
     stream.read(reinterpret_cast<char*>(buffer), bytes);
-    if (stream.fail() && !stream.eof()) {
+
+    if (stream.eof()) {
         stream.clear();
+    }
+    if (stream.fail()) {
         throw std::runtime_error("Read operation failed: " + path.string());
     }
 
@@ -176,8 +182,11 @@ size_t ZipArchive::onRead(void* datasrc, mz_uint64 offset, void* buffer, size_t 
 
     that->stream.seekg(offset, std::ios_base::beg);
     that->stream.read(reinterpret_cast<char*>(buffer), bytes);
-    if (that->stream.fail() && !that->stream.eof()) {
+
+    if (that->stream.eof()) {
         that->stream.clear();
+    }
+    if (that->stream.fail()) {
         throw std::runtime_error("Read operation failed: " + that->path.string());
     }
 

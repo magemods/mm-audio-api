@@ -40,8 +40,11 @@ size_t NativeFile::read(void* buffer, size_t bytes) {
     std::lock_guard<std::mutex> lock(mutex);
 
     stream.read(reinterpret_cast<char*>(buffer), bytes);
-    if (stream.fail() && !stream.eof()) {
+
+    if (stream.eof()) {
         stream.clear();
+    }
+    if (stream.fail()) {
         throw std::runtime_error("Read operation failed: " + path.string());
     }
 
@@ -60,6 +63,10 @@ int64_t NativeFile::seek(int64_t offset, int whence) {
     }
 
     stream.seekg(offset, dir);
+
+    if (stream.eof()) {
+        stream.clear();
+    }
     if (stream.fail()) {
         return -1;
     }
