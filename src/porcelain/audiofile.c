@@ -88,7 +88,7 @@ RECOMP_EXPORT s32 AudioApi_CreateStreamedSequence(AudioApiFileInfo* info) {
 
     cseq_mutebhv(seq, 0x20);
     cseq_mutescale(seq, 0x32);
-    cseq_initchan(seq, 1 << (channelCount - 1));
+    cseq_initchan(seq, (1 << channelCount) - 1);
     label = cseq_label_create(seq);
 
     for (channelNo = 0; channelNo < channelCount; channelNo++) {
@@ -133,7 +133,7 @@ RECOMP_EXPORT s32 AudioApi_CreateStreamedSequence(AudioApiFileInfo* info) {
         cseq_jump(seq, label);
     }
 
-    cseq_freechan(seq, 1 << (channelCount - 1));
+    cseq_freechan(seq, (1 << channelCount) - 1);
     cseq_section_end(seq);
 
     cseq_compile(root, 0);
