@@ -42,6 +42,7 @@ target_include_directories(${TARGET_NAME}
     PRIVATE
         ${CMAKE_SOURCE_DIR}/offline_build
         ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/thirdparty/utfcpp/source
         ${CMAKE_SOURCE_DIR}/thirdparty/plog/include
         ${CMAKE_SOURCE_DIR}/thirdparty/dr_libs
         ${CMAKE_SOURCE_DIR}/thirdparty/ogg/include

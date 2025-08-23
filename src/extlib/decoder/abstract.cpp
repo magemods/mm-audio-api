@@ -9,6 +9,7 @@
 
 #include <extlib/decoder/wav.hpp>
 #include <extlib/decoder/flac.hpp>
+#include <extlib/decoder/mp3.hpp>
 #include <extlib/decoder/vorbis.hpp>
 #include <extlib/decoder/opus.hpp>
 
@@ -86,6 +87,8 @@ std::unique_ptr<Abstract> factory(std::shared_ptr<Vfs::File> file, Type type) {
             type = Type::Wav;
         } else if (ext == ".flac") {
             type = Type::Flac;
+        } else if (ext == ".mp3") {
+            type = Type::Mp3;
         } else if (ext == ".opus") {
             type = Type::Opus;
         } else if (ext == ".ogg") {
@@ -100,6 +103,8 @@ std::unique_ptr<Abstract> factory(std::shared_ptr<Vfs::File> file, Type type) {
         return std::make_unique<Wav>(file);
     case Type::Flac:
         return std::make_unique<Flac>(file);
+    case Type::Mp3:
+        return std::make_unique<Mp3>(file);
     case Type::Vorbis:
         return std::make_unique<Vorbis>(file);
     case Type::Opus:

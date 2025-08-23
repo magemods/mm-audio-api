@@ -17,7 +17,6 @@ public:
     static size_t onRead(void* datasrc, void* ptr, size_t bytes);
     static drwav_bool32 onSeek(void* datasrc, int offset, drwav_seek_origin whence);
     static drwav_bool32 onTell(void* datasrc, drwav_int64* pCursor);
-    static void onMeta(void* datasrc, drwav_metadata* metadata);
 
 private:
     drwav* decoder = nullptr;

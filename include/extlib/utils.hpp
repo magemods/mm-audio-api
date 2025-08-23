@@ -6,6 +6,20 @@
 
 constexpr auto EPOCH = std::chrono::steady_clock::time_point{};
 
+void print_bytes(const void* ptr, size_t size);
+
+inline uint32_t read_u24_be(const uint8_t* p) {
+    return (p[0] << 16) | (p[1] << 8) | p[2];
+}
+
+inline uint32_t read_u32_syncsafe(const uint8_t* p) {
+    return ((p[0] & 0x7F) << 21) | ((p[1] & 0x7F) << 14) | ((p[2] & 0x7F) << 7) | (p[3] & 0x7F);
+}
+
+inline uint32_t read_u32_be(const uint8_t* p) {
+    return (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
+}
+
 inline uint32_t read_u32_le(const uint8_t* p) {
     return p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24);
 }
@@ -21,6 +35,13 @@ inline std::string lowercase(std::string &s) {
     std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
         return std::tolower(c);
     });
+    return s;
+}
+
+inline std::string alphanum(std::string &s) {
+    s.erase(std::remove_if(s.begin(), s.end(), [](unsigned char c) {
+        return !isalnum(c);
+    }), s.end());
     return s;
 }
 

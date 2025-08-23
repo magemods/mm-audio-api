@@ -3,9 +3,13 @@
 #include <climits>
 #include <cstring>
 #include <algorithm>
+#include <array>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
+
+#include <utf8.h>
 
 #include <extlib/utils.hpp>
 
@@ -37,15 +41,10 @@ void Metadata::setLoopInfo(uint32_t start, uint32_t end, int32_t count) {
 
 void Metadata::setCuePointLabel(uint32_t cueId, const char* data, size_t size) {
     std::string text(data, size);
-    uppercase(text);
-    trim(text);
+    CuePointType type = parseCuePointType(text);
 
-    if (text == "LOOP" || text == "CYCLE" || text == "CYCLES") {
-        cuePoints[cueId].type = CuePointType::LOOP;
-    } else if (text == "LOOPSTART" || text == "LOOP_START") {
-        cuePoints[cueId].type = CuePointType::LOOP_START;
-    } else if (text == "LOOPEND" || text == "LOOP_END") {
-        cuePoints[cueId].type = CuePointType::LOOP_END;
+    if (type != CuePointType::NONE) {
+        cuePoints[cueId].type = type;
     }
 }
 
@@ -55,6 +54,32 @@ void Metadata::setCuePointOffset(uint32_t cueId, uint32_t offset) {
 
 void Metadata::setCuePointLength(uint32_t cueId, uint32_t length) {
     cuePoints[cueId].sampleLength = length;
+}
+
+CuePointType Metadata::parseCuePointType(std::string text) {
+    const static std::array<std::pair<std::string, CuePointType>, 8> types = {
+        {
+            {"LOOP",       CuePointType::LOOP},
+            {"CYCLE",      CuePointType::LOOP},
+            {"CYCLES",     CuePointType::LOOP},
+            {"LOOPSTART",  CuePointType::LOOP_START},
+            {"LOOPBEGIN",  CuePointType::LOOP_START},
+            {"LOOPPOINT",  CuePointType::LOOP_START},
+            {"LOOPEND",    CuePointType::LOOP_END},
+            {"LOOPLENGTH", CuePointType::LOOP_LENGTH},
+        }
+    };
+
+    alphanum(text);
+    uppercase(text);
+
+    for (const auto& [ label, type ] : types) {
+        if (std::strcmp(label.c_str(), text.c_str()) == 0) {
+            return type;
+        }
+    }
+
+    return CuePointType::NONE;
 }
 
 void Metadata::parseRiffCue(const uint8_t* data, size_t size) {
@@ -129,24 +154,120 @@ void Metadata::parseRiffSmpl(const uint8_t* data, size_t size) {
     }
 }
 
-void Metadata::parseVorbisComment(const char* data, size_t size) {
-    std::string comment(data, size);
-    auto pos = comment.find('=');
-    if (pos == std::string::npos) {
+void Metadata::parseId3v1(const uint8_t* data, size_t size) {
+    if (size != 128 || std::memcmp(data, "TAG", 3) != 0) {
         return;
     }
 
-    auto key = comment.substr(0, pos);
-    uppercase(key);
+    // Check for ID3v1.1 trackNo
+    if (data[125] == 0 && data[126] > 0) {
+        parseVorbisComment(reinterpret_cast<const char*>(data + 97), 28);
+    } else {
+        parseVorbisComment(reinterpret_cast<const char*>(data + 97), 30);
+    }
+}
 
-    auto value = comment.substr(pos + 1);
+void Metadata::parseId3v2(const uint8_t* data, size_t size) {
+    if (size < 10 || std::memcmp(data, "ID3", 3) != 0) {
+        return;
+    }
 
-    if (key == "LOOPSTART" || key == "LOOP_START") {
-        comments[CuePointType::LOOP_START] = std::stoul(value);
-    } else if (key == "LOOPEND" || key == "LOOP_END") {
-        comments[CuePointType::LOOP_END] = std::stoul(value);
-    } else if (key == "LOOPLENGTH" || key == "LOOP_LENGTH") {
-        comments[CuePointType::LOOP_LENGTH] = std::stoul(value);
+    int headerSize, frameIdSize;
+    uint32_t (*frameSizeFn)(const uint8_t*);
+
+    switch (data[3]) {
+    case 2: // ID3v2.2
+        headerSize = 6;
+        frameIdSize = 3;
+        frameSizeFn = read_u24_be;
+        break;
+    case 3: // ID3v2.3
+        headerSize = 10;
+        frameIdSize = 4;
+        frameSizeFn = read_u32_be;
+        break;
+    case 4: // ID3v2.4
+        headerSize = 10;
+        frameIdSize = 4;
+        frameSizeFn = read_u32_syncsafe;
+        break;
+    default:
+        return;
+    }
+
+    const uint8_t* p = data + 10;
+    const uint8_t* end = data + size;
+
+    while (p + headerSize <= end) {
+        const char* frameId = reinterpret_cast<const char*>(p);
+
+        if (std::memcmp(frameId, "\0\0\0\0", frameIdSize) == 0) {
+            break;
+        }
+
+        size_t frameSize = frameSizeFn(p + frameIdSize);
+        if (frameSize <= 2 || p + headerSize + frameSize > end) {
+            break;
+        }
+
+        p += headerSize;
+
+        if (std::memcmp(frameId, "TXXX", frameIdSize) == 0) {
+            uint8_t encoding = *p;
+            std::string data;
+
+            switch (encoding) {
+            case 0: // Latin-1
+            case 3: // UTF-8
+                data = std::string(reinterpret_cast<const char*>(p + 1), frameSize - 1);
+                break;
+            case 1: // UTF-16 with BOM
+            case 2: // UTF-16BE
+                data = utf8::utf16to8(std::u16string(reinterpret_cast<const char16_t*>(p + 1), (frameSize - 1) / 2));
+                break;
+            default:
+                break;
+            }
+
+            auto pos = data.find('\0');
+
+            if (pos != std::string::npos) {
+                auto key = data.substr(0, pos);
+                auto value = data.substr(pos + 1);
+                auto type = parseCuePointType(key);
+
+                if (type != CuePointType::NONE && !value.empty()) {
+                    try {
+                        comments[type] = utf8::starts_with_bom(value)
+                            ? std::stoul(value.substr(3))
+                            : std::stoul(value);
+                    } catch (...) {
+                    }
+                }
+            }
+        }
+
+        p += frameSize;
+    }
+}
+
+void Metadata::parseVorbisComment(const char* data, size_t size) {
+    std::string comment(data, size);
+    auto pos = comment.find('=');
+
+    if (pos != std::string::npos) {
+        auto key = comment.substr(0, pos);
+        auto value = comment.substr(pos + 1);
+        auto type = parseCuePointType(key);
+
+        if (type != CuePointType::NONE && !value.empty()) {
+            try {
+                comments[type] = utf8::starts_with_bom(value)
+                    ? std::stoul(value.substr(3))
+                    : std::stoul(value);
+            } catch (...) {
+            }
+        }
     }
 }
 

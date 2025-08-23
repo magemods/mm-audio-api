@@ -34,6 +34,7 @@ void Vorbis::close() {
     ov_clear(decoder);
     delete decoder;
     decoder = nullptr;
+    pos.store(0);
 }
 
 void Vorbis::probe() {
@@ -69,14 +70,17 @@ long Vorbis::decode(std::vector<int16_t>* buffer, size_t count, size_t offset) {
 
     std::unique_lock<std::mutex> lock(mutex);
 
-    if (ov_pcm_seek(decoder, offset) != 0) {
-        return -1;
-    }
-
     int16_t* ptr = buffer->data();
     size_t framesToRead = std::min(count, metadata->sampleCount - offset);
     size_t framesRead = 0;
     long result = 0;
+
+    if (pos.load() != offset) {
+        if (ov_pcm_seek(decoder, offset) != 0) {
+            throw std::runtime_error("Decoder error: failed to seek to frame");
+        }
+    }
+
 
     while (framesRead < framesToRead) {
         result = ov_read(decoder, reinterpret_cast<char*>(ptr + framesRead * metadata->trackCount),
@@ -101,6 +105,8 @@ long Vorbis::decode(std::vector<int16_t>* buffer, size_t count, size_t offset) {
             throw std::runtime_error("Decoder error: Unknown");
         }
     }
+
+    pos.store(offset + framesToRead);
 
     return framesRead;
 }

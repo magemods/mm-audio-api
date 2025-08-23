@@ -12,6 +12,8 @@ target_sources(${TARGET_NAME} PUBLIC
     "decoder/metadata.cpp"
     "decoder/wav.cpp"
     "decoder/flac.cpp"
+    "decoder/mp3.cpp"
     "decoder/vorbis.cpp"
     "decoder/opus.cpp"
+    "utils.cpp"
 )

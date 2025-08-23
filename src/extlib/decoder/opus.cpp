@@ -34,6 +34,7 @@ void Opus::close() {
     std::unique_lock<std::mutex> lock(mutex);
     op_free(decoder);
     decoder = nullptr;
+    pos.store(0);
 }
 
 void Opus::probe() {
@@ -69,14 +70,16 @@ long Opus::decode(std::vector<int16_t>* buffer, size_t count, size_t offset) {
 
     std::unique_lock<std::mutex> lock(mutex);
 
-    if (op_pcm_seek(decoder, offset) != 0) {
-        return -1;
-    }
-
     int16_t* ptr = buffer->data();
     size_t framesToRead = std::min(count, metadata->sampleCount - offset);
     size_t framesRead = 0;
-    int result;
+    int result = 0;
+
+    if (pos.load() != offset) {
+        if (op_pcm_seek(decoder, offset) != 0) {
+            throw std::runtime_error("Decoder error: failed to seek to frame");
+        }
+    }
 
     while (framesRead < framesToRead) {
         result = op_read(decoder, ptr + framesRead * metadata->trackCount,
@@ -117,6 +120,8 @@ long Opus::decode(std::vector<int16_t>* buffer, size_t count, size_t offset) {
             throw std::runtime_error("Decoder error: Unknown");
         }
     }
+
+    pos.store(offset + framesToRead);
 
     return framesRead;
 }

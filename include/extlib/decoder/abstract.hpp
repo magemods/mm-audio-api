@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -15,6 +16,7 @@ enum class Type {
     Auto    = AUDIOAPI_CODEC_AUTO,
     Wav     = AUDIOAPI_CODEC_WAV,
     Flac    = AUDIOAPI_CODEC_FLAC,
+    Mp3     = AUDIOAPI_CODEC_MP3,
     Vorbis  = AUDIOAPI_CODEC_VORBIS,
     Opus    = AUDIOAPI_CODEC_OPUS,
 };
@@ -25,6 +27,7 @@ inline Type parseType(uint32_t val) {
     case Type::Auto:
     case Type::Wav:
     case Type::Flac:
+    case Type::Mp3:
     case Type::Vorbis:
     case Type::Opus:
         return type;
@@ -49,6 +52,8 @@ protected:
         : file(file), metadata(std::make_shared<Metadata>()) {}
 
     bool firstOpen = true;
+    std::atomic<size_t> pos = 0;
+
     std::mutex mutex;
     std::shared_ptr<Vfs::File> file;
 };

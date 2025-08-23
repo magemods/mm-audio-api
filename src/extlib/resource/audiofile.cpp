@@ -3,6 +3,9 @@
 #include <algorithm>
 
 #include <mod_recomp.h>
+#include <extlib/thread.hpp>
+
+#include <plog/Log.h>
 
 namespace Resource {
 
@@ -57,6 +60,9 @@ std::shared_ptr<std::vector<int16_t>> Audiofile::getChunk(size_t offset) {
         std::shared_lock<std::shared_mutex> cacheLock(cacheMutex);
         return cache.at(offset);
     } catch (const std::out_of_range& e) {
+        if (gMainThreadId == std::this_thread::get_id()) {
+            PLOG_DEBUG << "Cache miss " << offset;
+        }
     }
 
     open();

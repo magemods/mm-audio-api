@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <map>
+#include <string>
 
 namespace Decoder {
 
@@ -9,7 +10,7 @@ enum class CuePointType {
     LOOP,
     LOOP_START,
     LOOP_END,
-    LOOP_LENGTH, // delete me
+    LOOP_LENGTH,
 };
 
 struct CuePoint {
@@ -29,9 +30,12 @@ public:
     void setCuePointOffset(uint32_t cueId, uint32_t offset);
     void setCuePointLength(uint32_t cueId, uint32_t length);
 
+    CuePointType parseCuePointType(std::string text);
     void parseRiffCue(const uint8_t* data, size_t size);
     void parseRiffList(const uint8_t* data, size_t size);
     void parseRiffSmpl(const uint8_t* data, size_t size);
+    void parseId3v1(const uint8_t* data, size_t size);
+    void parseId3v2(const uint8_t* data, size_t size);
     void parseVorbisComment(const char* data, size_t size);
 
     void findLoopPoints();

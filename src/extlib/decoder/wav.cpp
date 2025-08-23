@@ -40,6 +40,7 @@ void Wav::close() {
     drwav_uninit(decoder);
     delete decoder;
     decoder = nullptr;
+    pos.store(0);
 }
 
 void Wav::probe() {
@@ -98,11 +99,14 @@ long Wav::decode(std::vector<int16_t>* buffer, size_t count, size_t offset) {
     std::unique_lock<std::mutex> lock(mutex);
 
     size_t framesToRead = std::min(count, metadata->sampleCount - offset);
-    drwav_bool32 result = drwav_seek_to_pcm_frame(decoder, offset);
 
-    if (!result) {
-        throw std::runtime_error("Decoder error: failed to seek to frame");
+    if (pos.load() != offset) {
+        if (!drwav_seek_to_pcm_frame(decoder, offset)) {
+            throw std::runtime_error("Decoder error: failed to seek to frame");
+        }
     }
+
+    pos.store(offset + framesToRead);
 
     return drwav_read_pcm_frames_s16(decoder, framesToRead, buffer->data());
 }

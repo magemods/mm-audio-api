@@ -17,6 +17,9 @@
 
 constexpr int GC_INTERVAL_SECONDS = 1;
 
+std::thread::id gMainThreadId = std::this_thread::get_id();
+std::thread::id gWorkerThreadId;
+
 static std::condition_variable sWorkerThreadSignal;
 static std::mutex sWorkerThreadMutex;
 
@@ -34,6 +37,8 @@ void workerThreadNotify() {
 }
 
 void workerThreadLoop() {
+    gWorkerThreadId = std::this_thread::get_id();
+
     while (true) {
         {
             std::unique_lock<std::mutex> lock(sWorkerThreadMutex);
