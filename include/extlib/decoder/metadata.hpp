@@ -5,20 +5,6 @@
 
 namespace Decoder {
 
-enum class CuePointType {
-    NONE,
-    LOOP,
-    LOOP_START,
-    LOOP_END,
-    LOOP_LENGTH,
-};
-
-struct CuePoint {
-    CuePointType type = CuePointType::NONE;
-    uint32_t sampleOffset = 0;
-    uint32_t sampleLength = 0;
-};
-
 class Metadata {
 public:
     void setTrackCount(uint32_t count);
@@ -30,13 +16,13 @@ public:
     void setCuePointOffset(uint32_t cueId, uint32_t offset);
     void setCuePointLength(uint32_t cueId, uint32_t length);
 
-    CuePointType parseCuePointType(std::string text);
     void parseRiffCue(const uint8_t* data, size_t size);
     void parseRiffList(const uint8_t* data, size_t size);
     void parseRiffSmpl(const uint8_t* data, size_t size);
     void parseId3v1(const uint8_t* data, size_t size);
     void parseId3v2(const uint8_t* data, size_t size);
-    void parseVorbisComment(const char* data, size_t size);
+    void parseComment(const char* data, size_t size);
+    void parseComment(const std::string& comment);
 
     void findLoopPoints();
 
@@ -48,8 +34,25 @@ public:
     int32_t loopCount = 0;
 
 private:
+    enum class LabelType {
+        NONE,
+        LOOP,
+        LOOP_START,
+        LOOP_END,
+        LOOP_LENGTH,
+        LOOP_POINTS,
+    };
+
+    struct CuePoint {
+        LabelType type = LabelType::NONE;
+        uint32_t sampleOffset = 0;
+        uint32_t sampleLength = 0;
+    };
+
+    LabelType parseLabelType(std::string text);
+
     std::map<int, CuePoint> cuePoints;
-    std::map<CuePointType, unsigned long> comments;
+    std::map<LabelType, unsigned long> comments;
     bool hasLoopPoints = false;
 };
 

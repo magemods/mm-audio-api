@@ -93,16 +93,16 @@ void Flac::onMeta(void* datasrc, drflac_metadata* metadata) {
 
     switch (metadata->type) {
     case DRFLAC_METADATA_BLOCK_TYPE_VORBIS_COMMENT: {
-        drflac_vorbis_comment_iterator* it;
-        drflac_init_vorbis_comment_iterator(it, metadata->data.vorbis_comment.commentCount,
-                                        metadata->data.vorbis_comment.pComments);
+        drflac_vorbis_comment_iterator it;
+        drflac_init_vorbis_comment_iterator(&it, metadata->data.vorbis_comment.commentCount,
+                                            metadata->data.vorbis_comment.pComments);
         for (;;) {
             drflac_uint32 size;
-            const char* comment = drflac_next_vorbis_comment(it, &size);
+            const char* comment = drflac_next_vorbis_comment(&it, &size);
             if (comment == nullptr) {
                 break;
             }
-            that->metadata->parseVorbisComment(comment, size);
+            that->metadata->parseComment(comment, size);
         }
         break;
     }

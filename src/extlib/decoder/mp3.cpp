@@ -98,7 +98,7 @@ void Mp3::onMeta(void* datasrc, const drmp3_metadata* metadata) {
 
     switch (metadata->type) {
     case DRMP3_METADATA_TYPE_APE:
-        that->metadata->parseVorbisComment((const char*)metadata->pRawData, metadata->rawDataSize);
+        that->metadata->parseComment((const char*)metadata->pRawData, metadata->rawDataSize);
         break;
     case DRMP3_METADATA_TYPE_ID3V1:
         that->metadata->parseId3v1((const uint8_t*)metadata->pRawData, metadata->rawDataSize);

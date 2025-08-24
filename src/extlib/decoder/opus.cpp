@@ -56,7 +56,7 @@ void Opus::probe() {
     const OpusTags* tags = op_tags(decoder, -1);
     if (tags) {
         for (int i = 0; i < tags->comments; i++) {
-            metadata->parseVorbisComment(tags->user_comments[i], tags->comment_lengths[i]);
+            metadata->parseComment(tags->user_comments[i], tags->comment_lengths[i]);
         }
     }
 

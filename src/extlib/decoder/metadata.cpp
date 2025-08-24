@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <map>
+#include <regex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -41,9 +42,9 @@ void Metadata::setLoopInfo(uint32_t start, uint32_t end, int32_t count) {
 
 void Metadata::setCuePointLabel(uint32_t cueId, const char* data, size_t size) {
     std::string text(data, size);
-    CuePointType type = parseCuePointType(text);
+    LabelType type = parseLabelType(text);
 
-    if (type != CuePointType::NONE) {
+    if (type != LabelType::NONE) {
         cuePoints[cueId].type = type;
     }
 }
@@ -54,32 +55,6 @@ void Metadata::setCuePointOffset(uint32_t cueId, uint32_t offset) {
 
 void Metadata::setCuePointLength(uint32_t cueId, uint32_t length) {
     cuePoints[cueId].sampleLength = length;
-}
-
-CuePointType Metadata::parseCuePointType(std::string text) {
-    const static std::array<std::pair<std::string, CuePointType>, 8> types = {
-        {
-            {"LOOP",       CuePointType::LOOP},
-            {"CYCLE",      CuePointType::LOOP},
-            {"CYCLES",     CuePointType::LOOP},
-            {"LOOPSTART",  CuePointType::LOOP_START},
-            {"LOOPBEGIN",  CuePointType::LOOP_START},
-            {"LOOPPOINT",  CuePointType::LOOP_START},
-            {"LOOPEND",    CuePointType::LOOP_END},
-            {"LOOPLENGTH", CuePointType::LOOP_LENGTH},
-        }
-    };
-
-    alphanum(text);
-    uppercase(text);
-
-    for (const auto& [ label, type ] : types) {
-        if (std::strcmp(label.c_str(), text.c_str()) == 0) {
-            return type;
-        }
-    }
-
-    return CuePointType::NONE;
 }
 
 void Metadata::parseRiffCue(const uint8_t* data, size_t size) {
@@ -161,9 +136,9 @@ void Metadata::parseId3v1(const uint8_t* data, size_t size) {
 
     // Check for ID3v1.1 trackNo
     if (data[125] == 0 && data[126] > 0) {
-        parseVorbisComment(reinterpret_cast<const char*>(data + 97), 28);
+        parseComment(reinterpret_cast<const char*>(data + 97), 28);
     } else {
-        parseVorbisComment(reinterpret_cast<const char*>(data + 97), 30);
+        parseComment(reinterpret_cast<const char*>(data + 97), 30);
     }
 }
 
@@ -230,20 +205,9 @@ void Metadata::parseId3v2(const uint8_t* data, size_t size) {
             }
 
             auto pos = data.find('\0');
-
             if (pos != std::string::npos) {
-                auto key = data.substr(0, pos);
-                auto value = data.substr(pos + 1);
-                auto type = parseCuePointType(key);
-
-                if (type != CuePointType::NONE && !value.empty()) {
-                    try {
-                        comments[type] = utf8::starts_with_bom(value)
-                            ? std::stoul(value.substr(3))
-                            : std::stoul(value);
-                    } catch (...) {
-                    }
-                }
+                data.replace(pos, 1, "=");
+                parseComment(data);
             }
         }
 
@@ -251,24 +215,73 @@ void Metadata::parseId3v2(const uint8_t* data, size_t size) {
     }
 }
 
-void Metadata::parseVorbisComment(const char* data, size_t size) {
+void Metadata::parseComment(const char* data, size_t size) {
     std::string comment(data, size);
+    parseComment(comment);
+}
+
+void Metadata::parseComment(const std::string& comment) {
     auto pos = comment.find('=');
 
-    if (pos != std::string::npos) {
-        auto key = comment.substr(0, pos);
-        auto value = comment.substr(pos + 1);
-        auto type = parseCuePointType(key);
+    if (pos == std::string::npos) {
+        return;
+    }
 
-        if (type != CuePointType::NONE && !value.empty()) {
-            try {
-                comments[type] = utf8::starts_with_bom(value)
-                    ? std::stoul(value.substr(3))
-                    : std::stoul(value);
-            } catch (...) {
+    auto key = comment.substr(0, pos);
+    auto value = comment.substr(pos + 1);
+    auto type = parseLabelType(key);
+
+    if (type == LabelType::NONE || value.empty()) {
+        return;
+    }
+
+    try {
+        if (type == LabelType::LOOP_POINTS) {
+            // Replace this if we ever bring in a full JSON library
+            std::regex reStart(R"("start"\s*:\s*(\d+))");
+            std::regex reEnd(R"("end"\s*:\s*(\d+))");
+            std::smatch match;
+
+            if (std::regex_search(value, match, reStart)) {
+                comments[LabelType::LOOP_START] = std::stoll(match[1].str());
             }
+            if (std::regex_search(value, match, reEnd)) {
+                comments[LabelType::LOOP_END] = std::stoll(match[1].str());
+            }
+        } else {
+            comments[type] = utf8::starts_with_bom(value)
+                ? std::stoul(value.substr(3))
+                : std::stoul(value);
+        }
+    } catch (...) {
+    }
+}
+
+Metadata::LabelType Metadata::parseLabelType(std::string text) {
+    const static std::array<std::pair<std::string, LabelType>, 9> types = {
+        {
+            {"LOOP",       LabelType::LOOP},
+            {"CYCLE",      LabelType::LOOP},
+            {"CYCLES",     LabelType::LOOP},
+            {"LOOPSTART",  LabelType::LOOP_START},
+            {"LOOPBEGIN",  LabelType::LOOP_START},
+            {"LOOPPOINT",  LabelType::LOOP_START},
+            {"LOOPEND",    LabelType::LOOP_END},
+            {"LOOPLENGTH", LabelType::LOOP_LENGTH},
+            {"LOOPPOINTS", LabelType::LOOP_POINTS},
+        }
+    };
+
+    alphanum(text);
+    uppercase(text);
+
+    for (const auto& [ label, type ] : types) {
+        if (std::strcmp(label.c_str(), text.c_str()) == 0) {
+            return type;
         }
     }
+
+    return LabelType::NONE;
 }
 
 void Metadata::findLoopPoints() {
@@ -279,29 +292,29 @@ void Metadata::findLoopPoints() {
         return;
     }
 
-    if (comments.contains(CuePointType::LOOP_START)) {
-        if (comments.contains(CuePointType::LOOP_END)) {
-            start = comments[CuePointType::LOOP_START];
-            end = comments[CuePointType::LOOP_END];
+    if (comments.contains(LabelType::LOOP_START)) {
+        if (comments.contains(LabelType::LOOP_END)) {
+            start = comments[LabelType::LOOP_START];
+            end = comments[LabelType::LOOP_END];
             return setLoopInfo(start, end, count);
         }
-        if (comments.contains(CuePointType::LOOP_LENGTH)) {
-            start = comments[CuePointType::LOOP_START];
-            end = start + comments[CuePointType::LOOP_LENGTH];
+        if (comments.contains(LabelType::LOOP_LENGTH)) {
+            start = comments[LabelType::LOOP_START];
+            end = start + comments[LabelType::LOOP_LENGTH];
             return setLoopInfo(start, end, count);
         }
     }
 
     for (const auto& [ cuePointId, cuePoint ] : cuePoints) {
         switch (cuePoint.type) {
-        case CuePointType::LOOP:
+        case LabelType::LOOP:
             start = cuePoint.sampleOffset;
             end = cuePoint.sampleOffset + cuePoint.sampleLength;
             return setLoopInfo(start, end, count);
-        case CuePointType::LOOP_START:
+        case LabelType::LOOP_START:
             start = cuePoint.sampleOffset;
             break;
-        case CuePointType::LOOP_END:
+        case LabelType::LOOP_END:
             end = cuePoint.sampleOffset;
             break;
         default:

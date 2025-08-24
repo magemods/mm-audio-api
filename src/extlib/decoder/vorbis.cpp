@@ -56,7 +56,7 @@ void Vorbis::probe() {
     vorbis_comment* tags = ov_comment(decoder, -1);
     if (tags) {
         for (int i = 0; i < tags->comments; i++) {
-            metadata->parseVorbisComment(tags->user_comments[i], tags->comment_lengths[i]);
+            metadata->parseComment(tags->user_comments[i], tags->comment_lengths[i]);
         }
     }
 
