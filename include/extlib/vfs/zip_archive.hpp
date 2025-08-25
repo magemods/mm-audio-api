@@ -26,7 +26,6 @@ public:
         bool compressed = true;
     };
 
-    void init();
     FileInfo locateFile(std::string path);
     void extractFileToBuffer(std::string path, std::vector<uint8_t>& buffer);
     size_t extractBytesToBuffer(void* buffer, size_t bytes, size_t offset);
@@ -35,6 +34,7 @@ private:
     struct Private{ explicit Private() = default; };
 
     ZipArchive(Private, fs::path path);
+    void init();
 
     void* mz_archive;
     size_t filesize;

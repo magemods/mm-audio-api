@@ -48,6 +48,7 @@ native_libraries = [
         "AudioApiNative_AddResource",
         "AudioApiNative_AddAudioFile",
         "AudioApiNative_AddSampleBank",
+        "AudioApiNative_AddRomDesc",
     ] }
 ]
 

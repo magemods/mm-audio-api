@@ -10,7 +10,6 @@ namespace Vfs {
 
 class File {
 public:
-    File() = delete;
     virtual ~File() = default;
     virtual void open() = 0;
     virtual void close() = 0;
@@ -31,6 +30,7 @@ public:
     };
 
 protected:
+    File() {};
     File(fs::path path)
         : path(path) {};
 

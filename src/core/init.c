@@ -30,9 +30,9 @@ RECOMP_IMPORT(".", bool AudioApiNative_Ready());
 RECOMP_IMPORT(".", bool AudioApiNative_Tick());
 
 RECOMP_CALLBACK(".", AudioApi_InitInternal) void AudioApi_ExtLibInit() {
-    unsigned char* mod_folder = recomp_get_mod_folder_path();
-    AudioApiNative_Init(6, mod_folder);
-    recomp_free(mod_folder);
+    // unsigned char* mod_folder = recomp_get_mod_folder_path();
+    // AudioApiNative_Init(6, mod_folder);
+    // recomp_free(mod_folder);
 }
 
 RECOMP_CALLBACK(".", AudioApi_ReadyInternal) void AudioApi_ExtLibReady() {
@@ -144,6 +144,12 @@ RECOMP_PATCH void AudioLoad_Init(void* heap, size_t heapSize) {
     AudioLoad_InitTable(gAudioCtx.sequenceTable, SEGMENT_ROM_START(Audioseq), 0);
     AudioLoad_InitTable(gAudioCtx.soundFontTable, SEGMENT_ROM_START(Audiobank), 0);
     AudioLoad_InitTable(gAudioCtx.sampleBankTable, SEGMENT_ROM_START(Audiotable), 0);
+
+    {
+        unsigned char* mod_folder = recomp_get_mod_folder_path();
+        AudioApiNative_Init(6, mod_folder);
+        recomp_free(mod_folder);
+    }
 
     // @mod Dispatch internal event for API to initialize tables
     AudioApi_InitInternal();

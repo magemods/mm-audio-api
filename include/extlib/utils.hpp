@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cctype>
+#include <cstring>
 #include <algorithm>
 #include <chrono>
 
@@ -22,6 +23,17 @@ inline uint32_t read_u32_be(const uint8_t* p) {
 
 inline uint32_t read_u32_le(const uint8_t* p) {
     return p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24);
+}
+
+inline void swap_b(char* str, size_t len) {
+    for (size_t i = 0; i < len; i += 4) {
+        char tmp0 = str[i];
+        char tmp1 = str[i+1];
+        str[i]   = str[i+3];
+        str[i+1] = str[i+2];
+        str[i+2] = tmp1;
+        str[i+3] = tmp0;
+    }
 }
 
 inline std::string uppercase(std::string &s) {

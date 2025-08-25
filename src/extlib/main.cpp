@@ -17,7 +17,9 @@
 #include <extlib/resource/audiofile.hpp>
 #include <extlib/resource/generic.hpp>
 #include <extlib/resource/samplebank.hpp>
+//#include <extlib/resource/rom.hpp>
 #include <extlib/thread.hpp>
+#include <extlib/vfs/rom.hpp>
 
 extern "C" {
     DLLEXPORT uint32_t recomp_api_version = RECOMP_API_VERSION;
@@ -33,6 +35,8 @@ std::unordered_map<size_t, std::shared_ptr<Resource::Abstract>> gResourceData;
 std::shared_mutex gResourceDataMutex;
 
 static plog::ConsoleAppender<plog::TxtFormatter> sConsoleAppender;
+
+fs::path tmp;
 
 RECOMP_DLL_FUNC(AudioApiNative_Init) {
     auto logLevel = RECOMP_ARG(uint32_t, 0);
@@ -58,6 +62,8 @@ RECOMP_DLL_FUNC(AudioApiNative_Init) {
             gVfs.addKnownZipExtension(".zip");
             gVfs.addKnownZipExtension(".nrm");
             gVfs.addKnownZipExtension(".mmrs");
+
+            tmp = rootDir;
         }
 
         {
@@ -82,12 +88,28 @@ RECOMP_DLL_FUNC(AudioApiNative_Init) {
 }
 
 RECOMP_DLL_FUNC(AudioApiNative_Ready) {
+    gVfs.findRoms(tmp);
     RECOMP_RETURN(bool, true);
 }
 
 RECOMP_DLL_FUNC(AudioApiNative_Tick) {
     workerThreadNotify();
     RECOMP_RETURN(bool, true);
+}
+
+RECOMP_DLL_FUNC(AudioApiNative_AddRomDesc) {
+    auto romDesc = RECOMP_ARG(AudioApiRomDesc*, 0);
+
+    try {
+        Vfs::Rom::addRomDesc(romDesc);
+
+        RECOMP_RETURN(bool, true);
+
+    } catch (...) {
+        PLOG_ERROR << "Unknown error";
+    }
+
+    RECOMP_RETURN(bool, false);
 }
 
 RECOMP_DLL_FUNC(AudioApiNative_Dma) {

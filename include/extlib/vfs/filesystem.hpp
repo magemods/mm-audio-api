@@ -18,6 +18,7 @@ public:
     bool isPathAllowed(fs::path path);
     void addKnownZipExtension(std::string ext);
     bool isZipFile(fs::path path);
+    void findRoms(fs::path path);
 
     std::shared_ptr<File> openFile(std::u8string baseDirStr, std::u8string pathStr);
 

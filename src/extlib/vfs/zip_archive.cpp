@@ -23,7 +23,7 @@ ZipArchive::ZipArchive(ZipArchive::Private, fs::path path)
     stream.exceptions(std::ifstream::badbit);
 
     if (!stream.is_open()) {
-        throw std::runtime_error("Could not open zip file");
+        throw std::runtime_error("Could not open zip archive");
     }
 
     filesize = static_cast<size_t>(stream.tellg());

@@ -73,4 +73,15 @@ typedef AudioApiResourceInfo AudioApiSequenceInfo;
 typedef AudioApiResourceInfo AudioApiSoundFontInfo;
 typedef AudioApiResourceInfo AudioApiSampleBankInfo;
 
+typedef struct AudioApiRomDesc {
+    char sha1hash[40];
+    char gameId[8];
+    char version[32];
+    u32 dmaTable;
+    u32 sequenceTable;
+    u32 soundFontTable;
+    u32 sampleBankTable;
+    u32 sequenceFontTable;
+} AudioApiRomDesc;
+
 #endif

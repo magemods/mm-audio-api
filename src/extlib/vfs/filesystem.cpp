@@ -4,8 +4,10 @@
 #include <vector>
 
 #include <extlib/vfs/native_file.hpp>
+#include <extlib/vfs/rom.hpp>
 #include <extlib/vfs/zip_file.hpp>
 #include <extlib/utils.hpp>
+#include <plog/Log.h>
 
 namespace Vfs {
 
@@ -77,24 +79,55 @@ std::shared_ptr<File> Filesystem::openFile(std::u8string baseDirStr, std::u8stri
     }
 
     if (!isPathAllowed(baseDir)) {
-        throw std::filesystem::filesystem_error("Base dir is not an allowed path", baseDir, std::error_code());
+        throw fs::filesystem_error("Base dir is not an allowed path", baseDir, std::error_code());
     }
 
     auto relativePath = fs::path(pathStr).lexically_normal();
     if (relativePath.empty() || relativePath.string().find("..") != std::string::npos) {
-        throw std::filesystem::filesystem_error("Path not child of base dir", relativePath, baseDir, std::error_code());
+        throw fs::filesystem_error("Path not child of base dir", relativePath, baseDir, std::error_code());
+    }
+
+    if (!fs::exists(baseDir)) {
+        throw fs::filesystem_error("Base dir does not exist", baseDir, std::error_code());
     }
 
     if (isZipFile(baseDir)) {
         auto zipArchive = ZipArchive::factory(baseDir);
         if (zipArchive == nullptr) {
-            throw std::filesystem::filesystem_error("Could not open ZIP file", baseDir, std::error_code());
+            throw fs::filesystem_error("Could not open ZIP file", baseDir, std::error_code());
         }
         return std::make_shared<ZipFile>(zipArchive, relativePath);
     }
 
-    auto fullPath = baseDir / relativePath;
-    return std::make_shared<NativeFile>(fullPath);
+    if (fs::is_directory(baseDir)) {
+        auto fullPath = baseDir / relativePath;
+        return std::make_shared<NativeFile>(fullPath);
+    }
+
+    throw fs::filesystem_error("Unknown base dir type", baseDir, std::error_code());
+}
+
+void Filesystem::findRoms(fs::path path) {
+    for (const auto& entry : fs::directory_iterator(path)) {
+        if (!fs::is_regular_file(entry.status())) {
+            continue;
+        }
+
+        auto ext = entry.path().extension().string();
+        if (ext != ".z64") {
+            continue;
+        }
+        // if (knownZipExtensions.contains(lowercase(ext))) {
+        //     return true;
+        // }
+        try {
+            Rom::factory(entry.path());
+            PLOG_DEBUG << "Added ROM: " << entry.path().string();
+        } catch (const std::runtime_error& e) {
+            PLOG_ERROR << "Rom error: " << e.what();
+        } catch(...) {
+        }
+    }
 }
 
 } // namespace Vfs
