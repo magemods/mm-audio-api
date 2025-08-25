@@ -91,12 +91,14 @@ bool cseq_ldchan(CSeqSection* section, u8 channelNum, CSeqSection* channel);
 bool cseq_instr(CSeqSection* section, u8 instNum);
 
 // Sequence commands
+bool cseq_volscale(CSeqSection* sequence, u8 arg);
 bool cseq_mutescale(CSeqSection* sequence, u8 arg);
 bool cseq_initchan(CSeqSection* sequence, u16 bitmask);
 bool cseq_freechan(CSeqSection* sequence, u16 bitmask);
 bool cseq_tempo(CSeqSection* sequence, u8 bpm);
 
 // Channel commands
+bool cseq_notepri(CSeqSection* section, u8 priority);
 bool cseq_font(CSeqSection* section, u8 fontId);
 bool cseq_fontinstr(CSeqSection* section, u8 fontId, u8 instId);
 bool cseq_noshort(CSeqSection* section);

@@ -3,6 +3,8 @@
 #include <recomp/modding.h>
 #include <core/audio_cmd.h>
 
+#include <recomp/recomputils.h>
+
 /**
  * This file patches various functions found in sequence.c and code_8019AF00.c in order to support
  * more than 256 sequences, as well as provide new exported functions for the same purpose.
@@ -125,6 +127,7 @@ u16 sExtFanfareSeqArgs        = 0x0000;
 u16 sExtPrevAmbienceSeqArgs   = 0x0000;
 u16 sExtPrevMainBgmSeqArgs    = 0x0000;
 
+RECOMP_DECLARE_EVENT(AudioApi_SequenceStarted(s8 seqPlayerIndex, s32 seqId, u16 seqArgs, u16 fadeInDuration));
 
 // ======== MAIN START, STOP, GETTER, SETTER FUNCTIONS ========
 
@@ -173,6 +176,9 @@ RECOMP_EXPORT void AudioApi_StartSequence(u8 seqPlayerIndex, s32 seqId, u16 seqA
 
         gActiveSeqs[seqPlayerIndex].freqScaleChannelFlags = 0;
         gActiveSeqs[seqPlayerIndex].volChannelFlags = 0;
+
+        // @mod call event
+        AudioApi_SequenceStarted(seqPlayerIndex, seqId, seqArgs, fadeInDuration);
     }
 }
 

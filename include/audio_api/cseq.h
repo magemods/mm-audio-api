@@ -90,12 +90,14 @@ RECOMP_IMPORT("magemods_audio_api", bool cseq_ldchan(CSeqSection* section, u8 ch
 RECOMP_IMPORT("magemods_audio_api", bool cseq_instr(CSeqSection* section, u8 instNum));
 
 // Sequence commands
+RECOMP_IMPORT("magemods_audio_api", bool cseq_volscale(CSeqSection* sequence, u8 arg));
 RECOMP_IMPORT("magemods_audio_api", bool cseq_mutescale(CSeqSection* sequence, u8 arg));
 RECOMP_IMPORT("magemods_audio_api", bool cseq_initchan(CSeqSection* sequence, u16 bitmask));
 RECOMP_IMPORT("magemods_audio_api", bool cseq_freechan(CSeqSection* sequence, u16 bitmask));
 RECOMP_IMPORT("magemods_audio_api", bool cseq_tempo(CSeqSection* sequence, u8 bpm));
 
 // Channel commands
+RECOMP_IMPORT("magemods_audio_api", bool cseq_notepri(CSeqSection* section, u8 priority));
 RECOMP_IMPORT("magemods_audio_api", bool cseq_font(CSeqSection* section, u8 fontId));
 RECOMP_IMPORT("magemods_audio_api", bool cseq_fontinstr(CSeqSection* section, u8 fontId, u8 instId));
 RECOMP_IMPORT("magemods_audio_api", bool cseq_noshort(CSeqSection* section));

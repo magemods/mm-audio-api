@@ -326,6 +326,13 @@ RECOMP_EXPORT bool cseq_instr(CSeqSection* section, u8 instNum) {
 
 // Sequence commands
 
+RECOMP_EXPORT bool cseq_volscale(CSeqSection* sequence, u8 arg) {
+    if (!sequence || sequence->ended) return false;
+    if (sequence->type != CSEQ_SECTION_SEQUENCE) return false;
+    return cseq_buffer_write_u8(sequence->buffer, ASEQ_OP_SEQ_VOLSCALE)
+        && cseq_buffer_write_u8(sequence->buffer, arg);
+}
+
 RECOMP_EXPORT bool cseq_mutescale(CSeqSection* sequence, u8 arg) {
     if (!sequence || sequence->ended) return false;
     if (sequence->type != CSEQ_SECTION_SEQUENCE) return false;
@@ -355,6 +362,13 @@ RECOMP_EXPORT bool cseq_tempo(CSeqSection* sequence, u8 bpm) {
 }
 
 // Channel commands
+
+RECOMP_EXPORT bool cseq_notepri(CSeqSection* section, u8 priority) {
+    if (!section || section->ended) return false;
+    if (section->type != CSEQ_SECTION_CHANNEL) return false;
+    return cseq_buffer_write_u8(section->buffer, ASEQ_OP_CHAN_NOTEPRI)
+        && cseq_buffer_write_u8(section->buffer, priority);
+}
 
 RECOMP_EXPORT bool cseq_font(CSeqSection* section, u8 fontId) {
     if (!section || section->ended) return false;
