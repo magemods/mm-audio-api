@@ -28,6 +28,7 @@
 #define SOUNDFONT_DEFAULT_INSTRUMENT_CAPACITY 16
 #define SOUNDFONT_DEFAULT_DRUM_CAPACITY 16
 #define SOUNDFONT_DEFAULT_SFX_CAPACITY 8
+#define SOUNDFONT_INSTRUMENT_OFFSET 2
 
 // Relocate an offset (relative to the start of the font data) to a pointer (a ram address)
 #define RELOC_TO_RAM(x, base) (void*)((uintptr_t)(x) + (uintptr_t)(IS_KSEG0(x) ? 0 : base))
@@ -60,7 +61,7 @@ u16 soundFontTableCapacity = NA_SOUNDFONT_MAX;
 void AudioApi_SoundFontQueueDrain(RecompQueueCmd* cmd);
 void AudioLoad_RelocateSample(TunedSample* tunedSample, void* fontData, SampleBankRelocInfo* sampleBankReloc);
 bool AudioApi_GrowSoundFontTables();
-bool AudioApi_GrowInstrumentList(CustomSoundFont** soundFontPtr);
+bool AudioApi_GrowInstrumentList(CustomSoundFont* soundFont);
 bool AudioApi_GrowDrumList(CustomSoundFont* soundFont);
 bool AudioApi_GrowSoundEffectList(CustomSoundFont* soundFont);
 Drum* AudioApi_CopyDrum(Drum* src);
@@ -262,7 +263,7 @@ CustomSoundFont* AudioApi_ImportVanillaSoundFontInternal(uintptr_t* fontData, u8
     soundFont->instruments = recomp_alloc(size);
     if (!soundFont->instruments) goto cleanup;
     Lib_MemSet(soundFont->instruments, 0, size);
-    Lib_MemCpy(soundFont->instruments, fontData + 2,
+    Lib_MemCpy(soundFont->instruments, fontData + SOUNDFONT_INSTRUMENT_OFFSET,
                numInstruments * sizeof(uintptr_t));
 
     while (numDrums > soundFont->drumsCapacity) soundFont->drumsCapacity <<= 1;
@@ -349,7 +350,7 @@ RECOMP_EXPORT void AudioApi_SetSoundFontSampleBank(s32 fontId, s32 bankNum, s32 
 
 s32 AudioApi_AddInstrumentInternal(CustomSoundFont* soundFont, Instrument* instrument) {
     if (soundFont->numInstruments >= soundFont->instrumentsCapacity) {
-        if (!AudioApi_GrowInstrumentList(&soundFont)) {
+        if (!AudioApi_GrowInstrumentList(soundFont)) {
             return -1;
         }
     }
@@ -724,7 +725,7 @@ RECOMP_PATCH void AudioLoad_RelocateFont(s32 fontId, void* fontDataStartAddr, Sa
         }
     }
 
-    for (i = 0; i < fontData->numInstruments; i++) {
+    for (i = 0; i < MIN(fontData->numInstruments, SOUNDFONT_MAX_INSTRUMENTS); i++) {
         inst = fontData->instruments[i];
         if (inst == NULL) {
             continue;
@@ -868,26 +869,25 @@ bool AudioApi_GrowSoundFontTables() {
     return false;
 }
 
-bool AudioApi_GrowInstrumentList(CustomSoundFont** soundFontPtr) {
-    CustomSoundFont* oldSoundFont = *soundFontPtr;
-    CustomSoundFont* newSoundFont = NULL;
-    u16 oldCapacity = oldSoundFont->instrumentsCapacity;
-    u16 newCapacity = oldSoundFont->instrumentsCapacity << 1;
-    size_t oldSize = sizeof(CustomSoundFont) + sizeof(uintptr_t) * oldCapacity;
-    size_t newSize = sizeof(CustomSoundFont) + sizeof(uintptr_t) * newCapacity;
+bool AudioApi_GrowInstrumentList(CustomSoundFont* soundFont) {
+    Instrument** newInstList = NULL;
+    u16 oldCapacity = soundFont->instrumentsCapacity;
+    u16 newCapacity = soundFont->instrumentsCapacity << 1;
+    size_t oldSize = sizeof(uintptr_t) * oldCapacity;
+    size_t newSize = sizeof(uintptr_t) * newCapacity;
 
-    newSoundFont = recomp_alloc(newSize);
-    if (!newSoundFont) {
+    newInstList = recomp_alloc(newSize);
+    if (!newInstList) {
         return false;
     }
-    Lib_MemSet(newSoundFont, 0, newSize);
-    Lib_MemCpy(newSoundFont, oldSoundFont, oldSize);
+    Lib_MemSet(newInstList, 0, newSize);
+    Lib_MemCpy(newInstList, soundFont->instruments, oldSize);
 
-    if (IS_RECOMP_ALLOC(oldSoundFont)) {
-        recomp_free(oldSoundFont);
+    if (IS_RECOMP_ALLOC(soundFont->instruments)) {
+        recomp_free(soundFont->instruments);
     }
-    newSoundFont->instrumentsCapacity = newCapacity;
-    *soundFontPtr = newSoundFont;
+    soundFont->instrumentsCapacity = newCapacity;
+    soundFont->instruments = newInstList;
     return true;
 }
 
@@ -955,7 +955,7 @@ Drum* AudioApi_CopyDrum(Drum* src) {
 
     if (src->envelope) {
         size_t envCount = 0;
-        while (src->envelope[envCount].delay != ADSR_HANG) {
+        while (src->envelope[envCount].delay != ADSR_DISABLE && src->envelope[envCount].delay != ADSR_HANG) {
             envCount++;
         }
         envCount++;
@@ -1001,7 +1001,7 @@ Instrument* AudioApi_CopyInstrument(Instrument* src) {
 
     if (src->envelope) {
         size_t envCount = 0;
-        while (src->envelope[envCount].delay != ADSR_HANG) {
+        while (src->envelope[envCount].delay != ADSR_DISABLE && src->envelope[envCount].delay != ADSR_HANG) {
             envCount++;
         }
         envCount++;
@@ -1048,7 +1048,7 @@ Fnv32_t AudioApi_HashSample(Sample* sample) {
     if (!sample) return 0;
 
     Fnv32_t hval = FNV1_32A_INIT;
-    hval = fnv_32a_buf(sample, 0x8, hval);
+    hval = fnv_32a_buf(sample, sizeof(Sample) - sizeof(uintptr_t) * 2, hval);
 
     if (sample->loop) {
         size_t loopSize = (sample->loop->header.count != 0) ? sizeof(AdpcmLoop) : sizeof(AdpcmLoopHeader);
@@ -1069,7 +1069,7 @@ Fnv32_t AudioApi_HashSample(Sample* sample) {
 Sample* AudioApi_CopySample(Sample* src) {
     if (!src) return NULL;
 
-    Fnv32_t hval;
+    Fnv32_t hval = 0;
     uintptr_t dupe;
 
     // ADPCM samples need to have their codeBook and predictorState data moved onto the audio heap.

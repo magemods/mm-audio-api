@@ -66,6 +66,7 @@ int64_t NativeFile::seek(int64_t offset, int whence) {
 
     if (stream.eof()) {
         stream.clear();
+        return filesize;
     }
     if (stream.fail()) {
         return -1;
@@ -76,7 +77,17 @@ int64_t NativeFile::seek(int64_t offset, int whence) {
 
 int64_t NativeFile::tell() {
     std::lock_guard<std::mutex> lock(mutex);
-    return stream.tellg();
+
+    int64_t pos = stream.tellg();
+
+    if (stream.eof()) {
+        stream.clear();
+    }
+    if (stream.fail()) {
+        return -1;
+    }
+
+    return pos;
 }
 
 } // namespace Vfs

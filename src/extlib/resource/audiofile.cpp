@@ -123,10 +123,12 @@ std::vector<PreloadTask> Audiofile::getPreloadTasks() {
     std::vector<PreloadTask> tasks;
     tasks.reserve(CACHE_FOLLOWUP_CHUNKS);
 
-    for (int i = 1; i <= CACHE_FOLLOWUP_CHUNKS; i++) {
-        size_t offset = CHUNK_START(pos + i * CHUNK_SIZE - 1);
+    size_t i, offset = CHUNK_START(pos - 1);
+
+    for (i = 1; i <= CACHE_FOLLOWUP_CHUNKS; i++) {
+        offset += CHUNK_SIZE;
         if (offset >= metadata->sampleCount) {
-            offset = CHUNK_START(metadata->loopStart) + (offset - CHUNK_END(metadata->sampleCount));
+            offset = CHUNK_START(metadata->loopStart);
         }
         tasks.emplace_back(i, offset);
     }

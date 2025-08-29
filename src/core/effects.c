@@ -49,7 +49,7 @@ RECOMP_CALLBACK(".", AudioApi_InitInternal) void AudioApi_EffectsInit() {
     s32 i, j;
 
     for (i = 0; i < ARRAY_COUNT(gHaasEffectDelaySize); i++) {
-        gHaasEffectDelaySize[i] *= 1.5f;
+        gHaasEffectDelaySize[i] *= FREQ_FACTOR;
     }
 
     for (i = 0; i < ARRAY_COUNT(gReverbSettingsTableFull); i++) {

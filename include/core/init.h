@@ -8,7 +8,7 @@
 
 #undef AIBUF_LEN
 #undef AIBUF_SIZE
-#define AIBUF_LEN (88 * SAMPLES_PER_FRAME * 2) // number of samples
+#define AIBUF_LEN (88 * SAMPLES_PER_FRAME * NUM_SUB_UPDATES) // number of samples
 #define AIBUF_SIZE (AIBUF_LEN * SAMPLE_SIZE) // number of bytes
 
 typedef enum {

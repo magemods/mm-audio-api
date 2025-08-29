@@ -284,7 +284,7 @@ RECOMP_PATCH void AudioHeap_Init(void) {
     gAudioCtx.unk_2870 /= gAudioCtx.audioBufferParameters.samplingFreq;
     gAudioCtx.unk_2870 /= gAudioCtx.maxTempo;
 
-    gAudioCtx.audioBufferParameters.specUnk4 = spec->unk_04;
+    gAudioCtx.audioBufferParameters.specUnk4 = spec->unk_04; // spec->numBuffers
     gAudioCtx.audioBufferParameters.numSamplesPerFrameTarget *= gAudioCtx.audioBufferParameters.specUnk4;
     gAudioCtx.audioBufferParameters.numSamplesPerFrameMax *= gAudioCtx.audioBufferParameters.specUnk4;
     gAudioCtx.audioBufferParameters.numSamplesPerFrameMin *= gAudioCtx.audioBufferParameters.specUnk4;
