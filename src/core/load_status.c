@@ -47,6 +47,10 @@ u8* sExtSoundFontLoadStatus = gAudioCtx.fontLoadStatus;
 extern AudioTable* AudioLoad_GetLoadTable(s32 tableType);
 extern u32 AudioLoad_GetRealTableIndex(s32 tableType, u32 id);
 
+RECOMP_CALLBACK(".", AudioApi_InitInternal) void AudioApi_LoadStatusInit() {
+    permanentCache = recomputil_create_u32_hashset();
+    loadedCache = recomputil_create_u32_hashset();
+}
 
 // ======== LOAD STATUS FUNCTIONS ========
 
@@ -81,12 +85,6 @@ RECOMP_PATCH void AudioHeap_ResetLoadStatus(void) {
 
     persistentCache.numEntries = 0;
 
-    if (!permanentCache) {
-        permanentCache = recomputil_create_u32_hashset();
-    }
-    if (!loadedCache) {
-        loadedCache = recomputil_create_u32_hashset();
-    }
     for (i = 0; i < gAudioCtx.soundFontTable->header.numEntries; i++) {
         if (AudioApi_GetTableEntryLoadStatus(FONT_TABLE, i) != LOAD_STATUS_PERMANENT) {
             AudioApi_SetTableEntryLoadStatus(FONT_TABLE, i, LOAD_STATUS_NOT_LOADED);
